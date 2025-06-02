@@ -21,6 +21,8 @@ model Issue {
   assignedToUserId String?  @db.VarChar(255)
   assignedToUser   User?    @relation(fields: [assignedToUserId], references: [id])
 }
+// TODO:  update this model for checklist 
+//this is a test
 model ChecklistTemplate {
   id               Int      @id @default(autoincrement())
   title            String   @db.VarChar(255)
