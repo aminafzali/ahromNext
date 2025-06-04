@@ -4,7 +4,7 @@ import "./globals.css";
 import "@fontsource/vazirmatn"; // ایمپورت فونت وزیر از پکیج fontsource
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { Container, Theme } from "@radix-ui/themes";
+import { Container, Theme, ThemePanel } from "@radix-ui/themes";
 import NavBar from "./NavBar";
 import AuthProvider from "./auth/Provider";
 import QueryClientProvider from "./QueryClientProvider";
@@ -40,9 +40,11 @@ export default function RootLayout({
               <main className="p-5">
                 <Container>{children}</Container>
               </main>
+           
             </Theme>
           </AuthProvider>
         </QueryClientProvider>
+      
       </body>
     </html>
   );
