@@ -1,41 +1,85 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
   relationMode = "prisma"
 }
 
 model Issue {
-  id               Int      @id @default(autoincrement())
-  title            String   @db.VarChar(255)
-  description      String   @db.Text
-  status           Status   @default(OPEN)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  assignedToUserId String?  @db.VarChar(255)
-  assignedToUser   User?    @relation(fields: [assignedToUserId], references: [id])
+  id               Int                 @id @default(autoincrement())
+  title            String              @db.VarChar(255)
+  description      String              @db.Text
+  status           Status              @default(OPEN)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  assignedToUserId String?             @db.VarChar(255)
+  assignedToUser   User?               @relation(fields: [assignedToUserId], references: [id])
+  responses        ChecklistResponse[] @relation("ResponseIssues")
+
+  @@index([assignedToUserId])
 }
-// TODO:  update this model for checklist 
-//this is a test
+
 model ChecklistTemplate {
-  id               Int      @id @default(autoincrement())
-  title            String   @db.VarChar(255)
-  description      String   @db.Text
-  status           Status   @default(OPEN)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id          Int                   @id @default(autoincrement())
+  title       String                @db.VarChar(255)
+  description String                @db.Text
+  items       ChecklistItem[]
+  assignments ChecklistAssignment[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+}
+
+model ChecklistItem {
+  id          Int                 @id @default(autoincrement())
+  templateId  Int
+  template    ChecklistTemplate   @relation(fields: [templateId], references: [id])
+  title       String              @db.VarChar(255)
+  description String              @db.Text
+  responses   ChecklistResponse[]
+
+  @@index([templateId])
+}
+
+model ChecklistAssignment {
+  id               Int                 @id @default(autoincrement())
+  templateId       Int
+  template         ChecklistTemplate   @relation(fields: [templateId], references: [id])
+  assignedToUserId String              @db.VarChar(255)
+  assignedToUser   User                @relation(fields: [assignedToUserId], references: [id])
+  responses        ChecklistResponse[]
+  assignedAt       DateTime            @default(now())
+
+  @@index([templateId])
+  @@index([assignedToUserId])
+}
+
+model ChecklistResponse {
+  id           Int                 @id @default(autoincrement())
+  assignmentId Int
+  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id])
+  itemId       Int
+  item         ChecklistItem       @relation(fields: [itemId], references: [id])
+  status       ResponseStatus      @default(NONE)
+  issues       Issue[]             @relation("ResponseIssues")
+  respondedAt  DateTime            @default(now())
+
+  @@index([assignmentId])
+  @@index([itemId])
 }
 
 enum Status {
   OPEN
   IN_PROGRESS
   CLOSED
+}
+
+enum ResponseStatus {
+  NONE
+  ACCEPTABLE
+  UNACCEPTABLE
 }
 
 model Account {
@@ -55,6 +99,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -63,17 +108,20 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model User {
-  id             String    @id @default(cuid())
-  name           String?
-  email          String?   @unique
-  emailVerified  DateTime?
-  image          String?
-  accounts       Account[]
-  sessions       Session[]
-  assignedIssues Issue[]
+  id                   String                @id @default(cuid())
+  name                 String?
+  email                String?               @unique
+  emailVerified        DateTime?
+  image                String?
+  accounts             Account[]
+  sessions             Session[]
+  assignedIssues       Issue[]
+  checklistAssignments ChecklistAssignment[]
 }
 
 model VerificationToken {

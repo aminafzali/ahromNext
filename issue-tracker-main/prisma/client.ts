@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-
+//todo: در مورد این فایل یک تحقیقی بکن که بهتر بفهمیش
 const prismaClientSingleton = () => {
   return new PrismaClient()
 }
