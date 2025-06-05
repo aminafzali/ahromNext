@@ -35,12 +35,14 @@ model ChecklistTemplate {
 model ChecklistItem {
   id          Int                 @id @default(autoincrement())
   templateId  Int
-  template    ChecklistTemplate   @relation(fields: [templateId], references: [id])
+  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade) // onDelete اضافه شد
   title       String              @db.VarChar(255)
   description String              @db.Text
+  order       Int // <-- فیلد جدید برای ترتیب
   responses   ChecklistResponse[]
 
   @@index([templateId])
+  @@index([templateId, order]) // ایندکس ترکیبی برای مرتب‌سازی بهتر
 }
 
 model ChecklistAssignment {
