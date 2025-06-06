@@ -1,3 +1,4 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,13 +12,22 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --foreground-rgb: 255, 255, 255;
+    /* شما می‌توانید متغیرهای رنگ پس‌زمینه را نیز برای حالت تیره تغییر دهید */
   }
 }
 
+/* این بخش مهم‌ترین قسمت است.
+  ما به کل صفحه (html و body) می‌گوییم که از متغیر فونتی که در layout.tsx تعریف کردیم، استفاده کند.
+  این روش تداخل‌ها را از بین می‌برد.
+*/
+html,
 body {
+  font-family: var(--font-vazirmatn), sans-serif; /* استفاده از متغیر فونت وزیرمتن */
   color: rgb(var(--foreground-rgb));
+  background-color: rgb(var(--background-end-rgb)); /* یک پس‌زمینه پایه تنظیم شد */
 }
 
+/* لایه‌های دیگر Tailwind شما */
 @layer utilities {
   .nav-link {
     @apply text-zinc-500 hover:text-zinc-800 transition-colors;

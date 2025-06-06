@@ -1,0 +1,155 @@
+/* app/checklists/templates/[templateId]/_components/customDatePickerStyles.css */
+
+/* محفظه اصلی DatePicker برای کنترل عرض */
+.custom-datepicker-container .rmdp-wrapper {
+  width: 100%;
+  box-shadow: none !important; /* حذف سایه پیش‌فرض اگر با دکمه کنترل می‌شود */
+  border: none !important; /* حذف border پیش‌فرض اگر با دکمه کنترل می‌شود */
+}
+
+/* مخفی کردن فیلد ورودی پیش‌فرض DatePicker اگر از دکمه سفارشی استفاده می‌کنیم و DatePicker فقط برای نمایش تقویم است */
+/* .hidden-datepicker-input > .rmdp-input {
+  visibility: hidden;
+  height: 0;
+  width: 0;
+  padding: 0;
+  border: none;
+} */
+
+/* استایل‌دهی به فیلد ورودی DatePicker اگر از آن به صورت مستقیم استفاده شود (برای سازگاری با Radix) */
+/* اگر از دکمه برای باز کردن تقویم استفاده می‌کنید، این بخش ممکن است کمتر مورد نیاز باشد،
+   مگر اینکه بخواهید فیلد ورودی DatePicker هم قابل مشاهده و ویرایش باشد. */
+.radix-TextFieldInput.rmdp-input { /* کلاس ترکیبی برای اعمال استایل Radix به input خود DatePicker */
+  height: var(--input-height-2, 36px); /* استفاده از متغیر سایز 2 رادیکس یا معادل آن */
+  line-height: var(--input-line-height-2, 1.5);
+  padding: 0 var(--space-3); /* استفاده از space-3 رادیکس برای padding */
+  text-align: right;
+  width: 100%;
+  border-radius: var(--radius-2);
+  border: 1px solid var(--gray-a7);
+  background-color: var(--color-background, white); /* پس‌زمینه پیش‌فرض */
+  color: var(--color-text, black); /* رنگ متن پیش‌فرض */
+  font-size: var(--font-size-2);
+  box-sizing: border-box; /* برای محاسبه صحیح padding و border */
+}
+.radix-TextFieldInput.rmdp-input:focus {
+  border-color: var(--accent-a8, var(--accent-9)); /* رنگ accent برای focus */
+  box-shadow: 0 0 0 1px var(--accent-a8, var(--accent-9));
+}
+
+/* استایل برای حالت تیره فیلد ورودی DatePicker */
+.dark .radix-TextFieldInput.rmdp-input {
+  background-color: var(--gray-a3, #262626); /* پس‌زمینه تیره */
+  border-color: var(--gray-a6, #525252);
+  color: var(--gray-12, white); /* رنگ متن روشن */
+}
+.dark .radix-TextFieldInput.rmdp-input:focus {
+  border-color: var(--accent-a8, var(--accent-9));
+  box-shadow: 0 0 0 1px var(--accent-a8, var(--accent-9));
+}
+
+
+/* اطمینان از اینکه تقویم روی سایر عناصر نمایش داده می‌شود */
+.rmdp-container {
+  z-index: 150 !important; /* افزایش z-index برای اطمینان از قرارگیری روی سایر عناصر */
+  background-color: var(--color-panel-solid, white); /* پس‌زمینه پنل رادیکس */
+  border: 1px solid var(--gray-a6, #e0e0e0);
+  border-radius: var(--radius-3, 6px);
+  box-shadow: var(--shadow-4, 0 6px 16px rgba(0,0,0,0.08)); /* سایه استاندارد رادیکس */
+}
+.dark .rmdp-container {
+    background-color: var(--gray-2, #1c1c1c); /* پس‌زمینه تیره‌تر برای پنل */
+    border-color: var(--gray-5, #404040);
+    box-shadow: var(--shadow-4, 0 6px 16px rgba(0,0,0,0.2));
+}
+
+/* نمایش صحیح تقویم فارسی */
+.rmdp-calendar {
+  min-width: 300px; /* افزایش عرض برای نمایش بهتر تاریخ‌های طولانی‌تر فارسی */
+  padding: var(--space-3); /* استفاده از متغیر space رادیکس */
+}
+
+.rmdp-header {
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-1); /* کمی padding افقی برای هدر */
+}
+
+.rmdp-header-values, /* برای نام ماه و سال */
+.rmdp-week-day,     /* برای نام روزهای هفته */
+.rmdp-day span {    /* برای اعداد روزها */
+  font-family: inherit !important; /* استفاده از فونت اصلی صفحه */
+  font-size: var(--font-size-2); /* تنظیم اندازه فونت اعداد و متن‌ها در تقویم */
+  color: var(--gray-11);
+}
+.dark .rmdp-header-values,
+.dark .rmdp-week-day,
+.dark .rmdp-day span {
+  color: var(--gray-11); /* رنگ متن در حالت تیره */
+}
+.rmdp-header-values {
+    font-weight: var(--font-weight-bold); /* برجسته کردن نام ماه و سال */
+    font-size: var(--font-size-3);
+}
+
+
+/* استایل برای دکمه‌های جهت (arrow) و نام ماه/سال در حالت هاور */
+.rmdp-arrow-container:hover,
+.rmdp-header div[style*="center"]:hover { /* انتخاب دقیق‌تر نام ماه/سال */
+  background-color: var(--gray-a3) !important;
+  border-radius: var(--radius-2);
+}
+.dark .rmdp-arrow-container:hover,
+.dark .rmdp-header div[style*="center"]:hover {
+  background-color: var(--gray-a4) !important;
+}
+
+/* استایل برای روزها در حالت هاور (به جز روزهای غیرفعال یا انتخاب شده) */
+.rmdp-day:not(.rmdp-disabled):not(.rmdp-day-hidden) span:hover {
+  background-color: var(--accent-a3) !important;
+  color: var(--accent-11) !important;
+  border-radius: var(--radius-2);
+}
+.dark .rmdp-day:not(.rmdp-disabled):not(.rmdp-day-hidden) span:hover {
+  background-color: var(--accent-a4) !important;
+  color: var(--accent-11) !important;
+}
+
+/* استایل برای روز انتخاب شده */
+.rmdp-day.rmdp-selected span:not(.rmdp-disabled) {
+  background-color: var(--accent-9) !important; /* رنگ اصلی accent */
+  color: white !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-2);
+}
+.dark .rmdp-day.rmdp-selected span:not(.rmdp-disabled) {
+  background-color: var(--accent-9) !important; /* رنگ اصلی accent در حالت تیره هم می‌تواند یکی باشد */
+}
+
+/* استایل برای روز جاری (امروز) اگر انتخاب نشده باشد */
+.rmdp-day.rmdp-today span:not(.rmdp-selected) {
+  background-color: var(--gray-a3) !important;
+  color: var(--gray-12) !important;
+  border-radius: var(--radius-2);
+  border: 1px solid var(--accent-a7); /* یک border ملایم برای تمایز */
+}
+.dark .rmdp-day.rmdp-today span:not(.rmdp-selected) {
+  background-color: var(--gray-a4) !important;
+  color: var(--gray-12) !important;
+  border: 1px solid var(--accent-a7);
+}
+
+/* افزایش اندازه دکمه‌های فلش برای ناوبری ماه‌ها */
+.rmdp-arrow {
+    width: 10px !important; /* افزایش اندازه فلش‌ها */
+    height: 10px !important;
+    border-width: 0 3px 3px 0 !important; /* ضخیم‌تر کردن فلش‌ها */
+}
+.rmdp-arrow-container {
+    padding: var(--space-2) !important; /* فضای بیشتر برای کلیک */
+}
+
+/* اطمینان از اینکه popover تقویم به درستی نمایش داده می‌شود */
+.rmdp-wrapper.rmdp- अब { /* برای حالتی که تقویم پایین باز می‌شود */
+    transform-origin: top right !important; /* برای باز شدن صحیح در حالت RTL */
+}
+

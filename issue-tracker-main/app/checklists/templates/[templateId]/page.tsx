@@ -1,30 +1,27 @@
 // app/checklists/templates/[templateId]/page.tsx
 import prisma from '@/prisma/client';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import React from 'react';
-import { Heading, Text, Box, Flex, Card, Separator, Button as RadixButton, Select, Callout } from '@radix-ui/themes';
-import { ChecklistItem, ChecklistTemplate as PrismaChecklistTemplate, User } from '@prisma/client';
+import { Heading, Box, Flex, Button as RadixButton, Callout } from '@radix-ui/themes';
+import { ChecklistItem, ChecklistTemplate as PrismaChecklistTemplate, User, Category, Tag } from '@prisma/client';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import AssignChecklistForm from './_components/AssignChecklistForm'; // کامپوننت فرم تخصیص
+// ایمپورت کامپوننت کلاینت جدید برای تب‌ها
+import TemplateDetailClientTabs, { ChecklistTemplateFull } from './_components/TemplateDetailClientTabs'; 
 
-// تایپ برای الگو همراه با آیتم‌هایش
-type ChecklistTemplateWithItems = PrismaChecklistTemplate & {
-  items: ChecklistItem[];
-};
+// تایپ ChecklistTemplateFull به کامپوننت کلاینت منتقل شد و از آنجا export می‌شود
 
 interface Props {
   params: { templateId: string };
+  searchParams: { tab?: string };
 }
 
-const ChecklistTemplateDetailPage = async ({ params }: Props) => {
+const ChecklistTemplateDetailPage = async ({ params, searchParams }: Props) => {
   const session = await getServerSession(authOptions);
-  // اگر نیاز به احراز هویت برای مشاهده این صفحه است:
-  // if (!session) {
-  //   // redirect('/api/auth/signin'); یا نمایش پیام خطا
-  //   return <Callout.Root color="red">برای مشاهده این صفحه باید وارد شوید.</Callout.Root>;
-  // }
+  if (!session) {
+    redirect(`/api/auth/signin?callbackUrl=/checklists/templates/${params.templateId}`);
+  }
 
   const templateId = parseInt(params.templateId);
   if (isNaN(templateId)) {
@@ -34,9 +31,9 @@ const ChecklistTemplateDetailPage = async ({ params }: Props) => {
   const template = await prisma.checklistTemplate.findUnique({
     where: { id: templateId },
     include: {
-      items: {
-        orderBy: { order: 'asc' }, // نمایش آیتم‌ها به ترتیب order
-      },
+      items: { orderBy: { order: 'asc' } },
+      categories: { select: { id: true, name: true } },
+      tags: { select: { id: true, name: true } },
     },
   });
 
@@ -44,65 +41,45 @@ const ChecklistTemplateDetailPage = async ({ params }: Props) => {
     notFound();
   }
 
-  // خواندن لیست کاربران برای dropdown تخصیص
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true },
     orderBy: { name: 'asc' },
   });
+  const allCategories = await prisma.category.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+  const allTags = await prisma.tag.findMany({
+    select: { id: true, name: true },
+    orderBy: { name: 'asc' },
+  });
+
+  // تعیین تب فعال پیش‌فرض از searchParams یا "view"
+  const defaultTab = (searchParams.tab === 'edit' || searchParams.tab === 'assign' || searchParams.tab === 'view') 
+                     ? searchParams.tab 
+                     : "view";
 
   return (
-    <Flex direction={{ initial: 'column', md: 'row' }} gap="5" className="p-4 md:p-6">
-      <Box className="md:w-2/3">
-        <Heading as="h1" size="7" mb="2">
-          {template.title}
+    <Box className="max-w-5xl mx-auto p-4 md:p-6 dir-rtl">
+      <Flex justify="between" align="center" mb="4">
+        <Heading as="h1" size="8" className="text-gray-800 dark:text-gray-100">
+          جزئیات قالب چک‌لیست
         </Heading>
-        <Text as="p" color="gray" size="3" mb="4">
-          {template.description || 'بدون توضیحات.'}
-        </Text>
+        <RadixButton variant="soft" color="gray" asChild>
+          <Link href="/checklists/list?tab=templates">بازگشت به لیست قالب‌ها</Link>
+        </RadixButton>
+      </Flex>
 
-        <Separator my="4" size="4" />
-
-        <Heading as="h2" size="5" mb="3">
-          آیتم‌های الگو ({template.items.length})
-        </Heading>
-        {template.items.length === 0 && <Text color="gray">این الگو هنوز آیتمی ندارد.</Text>}
-        <Flex direction="column" gap="3">
-          {template.items.map((item, index) => (
-            <Card key={item.id} variant="surface">
-              <Flex direction="column" gap="1">
-                <Text weight="bold">
-                  {index + 1}. {item.title}
-                </Text>
-                {item.description && (
-                  <Text size="2" color="gray">
-                    {item.description}
-                  </Text>
-                )}
-              </Flex>
-            </Card>
-          ))}
-        </Flex>
-      </Box>
-
-      <Box className="md:w-1/3">
-        <Card>
-          <Heading as="h3" size="4" mb="3">
-            تخصیص این الگو
-          </Heading>
-          {/* کامپوننت فرم تخصیص در اینجا قرار می‌گیرد */}
-          <AssignChecklistForm templateId={template.id} users={users} />
-        </Card>
-        <Flex mt="4" justify="start">
-            <RadixButton variant="soft" color="gray" asChild>
-                <Link href="/checklists/list">بازگشت به لیست الگوها</Link>
-            </RadixButton>
-        </Flex>
-      </Box>
-    </Flex>
+      {/* استفاده از کامپوننت کلاینت برای نمایش تب‌ها */}
+      <TemplateDetailClientTabs
+        template={template as ChecklistTemplateFull} // Cast به تایپ صحیح
+        allUsers={users}
+        allCategories={allCategories}
+        allTags={allTags}
+        defaultTab={defaultTab}
+      />
+    </Box>
   );
 };
 
 export default ChecklistTemplateDetailPage;
-
-
-

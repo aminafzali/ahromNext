@@ -30,29 +30,64 @@ model ChecklistTemplate {
   assignments ChecklistAssignment[]
   createdAt   DateTime              @default(now())
   updatedAt   DateTime              @updatedAt
+  categories  Category[]            @relation("ChecklistTemplateCategories")
+  tags        Tag[]                 @relation("ChecklistTemplateTags")
+  isActive    Boolean               @default(true)
+
+  @@index([isActive])
+}
+
+model Category {
+  id   Int    @id @default(autoincrement())
+  name String @unique @db.VarChar(100)
+
+  // فیلدهای لازم برای ساختار درختی
+  parentId Int?
+  // اصلاح شده برای جلوگیری از خطای Prisma در روابط خودارجاع
+  parent   Category?  @relation("ParentChild", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children Category[] @relation("ParentChild")
+
+  templates ChecklistTemplate[] @relation("ChecklistTemplateCategories")
+
+  @@index([name])
+  @@index([parentId]) // اصلاح: اضافه کردن ایندکس برای بهبود عملکرد
+}
+
+model Tag {
+  id        Int                 @id @default(autoincrement())
+  name      String              @unique @db.VarChar(50)
+  // اضافه شدن فیلد رنگ
+  color     String              @default("gray") @db.VarChar(20)
+  templates ChecklistTemplate[] @relation("ChecklistTemplateTags")
+
+  @@index([name])
 }
 
 model ChecklistItem {
   id          Int                 @id @default(autoincrement())
   templateId  Int
-  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade) // onDelete اضافه شد
+  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
   title       String              @db.VarChar(255)
   description String              @db.Text
-  order       Int // <-- فیلد جدید برای ترتیب
+  order       Int
   responses   ChecklistResponse[]
 
   @@index([templateId])
-  @@index([templateId, order]) // ایندکس ترکیبی برای مرتب‌سازی بهتر
+  @@index([templateId, order])
 }
 
 model ChecklistAssignment {
   id               Int                 @id @default(autoincrement())
   templateId       Int
-  template         ChecklistTemplate   @relation(fields: [templateId], references: [id])
+  // اصلاح: onDelete: Cascade به onDelete: Restrict تغییر کرد
+  // این کار از حذف الگو در صورتی که تخصیصی داشته باشد، جلوگیری می‌کند.
+  template         ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   assignedToUserId String              @db.VarChar(255)
   assignedToUser   User                @relation(fields: [assignedToUserId], references: [id])
   responses        ChecklistResponse[]
   assignedAt       DateTime            @default(now())
+  // اضافه شدن تاریخ سررسید
+  dueDate          DateTime?
 
   @@index([templateId])
   @@index([assignedToUserId])
@@ -61,12 +96,12 @@ model ChecklistAssignment {
 model ChecklistResponse {
   id           Int                 @id @default(autoincrement())
   assignmentId Int
-  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id])
+  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   itemId       Int
-  item         ChecklistItem       @relation(fields: [itemId], references: [id])
+  item         ChecklistItem       @relation(fields: [itemId], references: [id], onDelete: Cascade)
   status       ResponseStatus      @default(NONE)
   issues       Issue[]             @relation("ResponseIssues")
-  respondedAt  DateTime            @default(now())
+  respondedAt  DateTime            @default(now()) @updatedAt
 
   @@index([assignmentId])
   @@index([itemId])

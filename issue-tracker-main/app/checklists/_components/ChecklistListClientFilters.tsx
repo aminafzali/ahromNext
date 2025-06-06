@@ -2,32 +2,32 @@
 "use client";
 
 import { Select, Button as RadixButton, Flex } from "@radix-ui/themes";
-import { useRouter, useSearchParams } from "next/navigation"; // Import hooks
+import { useRouter, useSearchParams } from "next/navigation";
 import React from "react";
-import { MixerHorizontalIcon } from "@radix-ui/react-icons";
-// مسیر import برای تایپ‌ها باید صحیح باشد. اگر page.tsx در پوشه list است، این مسیر درست است.
-// اگر ساختار پوشه متفاوت است، این مسیر را تنظیم کنید.
-import { ChecklistAssignmentQuery, ResponseFilterStatus } from "../list/page";
+// اگر TagIcon همچنان خطا می‌دهد، آن را با BookmarkIcon یا آیکون مناسب دیگری جایگزین کنید
+import { MixerHorizontalIcon, ReaderIcon, BookmarkIcon } from "@radix-ui/react-icons";
+import { ChecklistAssignmentQuery, ResponseFilterStatus } from "../list/page"; 
+import { Category, Tag } from "@prisma/client";
 
-// کامپوننت فیلتر وضعیت پاسخ
 const ResponseStatusFilter = ({ currentFilter }: { currentFilter?: ResponseFilterStatus }) => {
   const router = useRouter();
-  const searchParamsHook = useSearchParams(); // استفاده از useSearchParams برای گرفتن پارامترهای فعلی
+  const searchParamsHook = useSearchParams();
 
   const onFilterChange = (value: string) => {
-    const params = new URLSearchParams(searchParamsHook.toString()); // ایجاد پارامترهای جدید از روی پارامترهای فعلی
+    const params = new URLSearchParams(searchParamsHook.toString());
     if (value && value !== 'all') {
       params.set('responseStatus', value);
     } else {
       params.delete('responseStatus');
     }
-    params.delete('page'); // بازگشت به صفحه اول با تغییر فیلتر
+    params.delete('page');
+    params.set('tab', 'assignments');
     router.push(`/checklists/list?${params.toString()}`);
   };
 
   return (
     <Select.Root defaultValue={currentFilter || 'all'} onValueChange={onFilterChange}>
-      <Select.Trigger placeholder="فیلتر بر اساس وضعیت پاسخ..." />
+      <Select.Trigger radius="full" placeholder="وضعیت پاسخ..." />
       <Select.Content>
         <Select.Item value="all">همه وضعیت‌ها</Select.Item>
         <Select.Item value="open">باز (جدید یا در حال انجام)</Select.Item>
@@ -40,51 +40,70 @@ const ResponseStatusFilter = ({ currentFilter }: { currentFilter?: ResponseFilte
 
 interface ClientFiltersProps {
     searchParams: ChecklistAssignmentQuery;
-    // usersForFilter?: { id: string; name: string | null; email: string | null }[]; // اگر لیست کاربران را پاس می‌دهید
+    allCategories: Pick<Category, 'id' | 'name'>[];
+    allTags: Pick<Tag, 'id' | 'name'>[];
 }
 
-const ChecklistListClientFilters = ({ searchParams }: ClientFiltersProps) => {
+const ChecklistListClientFilters = ({ searchParams, allCategories, allTags }: ClientFiltersProps) => {
   const router = useRouter();
-  const currentSearchParams = useSearchParams();
+  const currentQueryParams = useSearchParams();
 
-  const onUserFilterChange = (userIdToFilter: string) => {
-    const params = new URLSearchParams(currentSearchParams.toString());
-    if (userIdToFilter && userIdToFilter !== 'all') {
-      params.set('assignedToUserId', userIdToFilter);
+  const handleFilterChange = (filterName: 'assignedToUserId' | 'category' | 'tag', value: string) => {
+    const params = new URLSearchParams(currentQueryParams.toString());
+    if (value && value !== 'all') {
+      params.set(filterName, value);
     } else {
-      params.delete('assignedToUserId');
+      params.delete(filterName);
     }
     params.delete('page');
+    params.set('tab', 'assignments');
     router.push(`/checklists/list?${params.toString()}`);
   };
   
   return (
-    <Flex gap="3" align="center" wrap="wrap" mt="3" mb="3">
+    <Flex gap="3" align="center" wrap="wrap" mt="0" mb="0" className="dir-rtl">
       <ResponseStatusFilter currentFilter={searchParams.responseStatus} />
+      
+      <Select.Root 
+        value={searchParams.category || 'all'} 
+        onValueChange={(value) => handleFilterChange('category', value)}
+      >
+        <Select.Trigger radius="full" placeholder="دسته‌بندی الگو...">
+            <ReaderIcon />
+        </Select.Trigger>
+        <Select.Content>
+            <Select.Item value="all">همه دسته‌بندی‌ها</Select.Item>
+            {allCategories.map(cat => (
+                <Select.Item key={cat.id} value={cat.name}>{cat.name}</Select.Item>
+            ))}
+        </Select.Content>
+      </Select.Root>
+
+      <Select.Root 
+        value={searchParams.tag || 'all'} 
+        onValueChange={(value) => handleFilterChange('tag', value)}
+      >
+        <Select.Trigger radius="full" placeholder="برچسب الگو...">
+            {/* در صورت عدم وجود TagIcon، از BookmarkIcon استفاده کنید */}
+                 <BookmarkIcon className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 mt-px" />
+            {/* <BookmarkIcon /> */}
+        </Select.Trigger>
+        <Select.Content>
+            <Select.Item value="all">همه برچسب‌ها</Select.Item>
+            {allTags.map(tag => (
+                <Select.Item key={tag.id} value={tag.name}>{tag.name}</Select.Item>
+            ))}
+        </Select.Content>
+      </Select.Root>
+
       <RadixButton 
         variant={searchParams.assignedToUserId === 'me' ? "solid" : "soft"}
-        onClick={() => onUserFilterChange(searchParams.assignedToUserId === 'me' ? 'all' : 'me')}
+        onClick={() => handleFilterChange('assignedToUserId', searchParams.assignedToUserId === 'me' ? 'all' : 'me')}
+        radius="full"
       >
         <MixerHorizontalIcon />
         {searchParams.assignedToUserId === 'me' ? "نمایش همه کاربران" : "فقط اختصاص یافته به من"}
       </RadixButton>
-      {/* // مثال برای Select کاربران اگر لیست کاربران را از سرور پاس داده بودید:
-        // فرض کنید usersForFilter از props پاس داده شده است.
-        {usersForFilter && usersForFilter.length > 0 && (
-            <Select.Root 
-                value={searchParams.assignedToUserId && searchParams.assignedToUserId !== 'me' ? searchParams.assignedToUserId : 'all'} 
-                onValueChange={(value) => onUserFilterChange(value)}
-            >
-                <Select.Trigger placeholder="فیلتر بر اساس کاربر..." />
-                <Select.Content>
-                    <Select.Item value="all">همه کاربران (غیر از من)</Select.Item>
-                    {usersForFilter.map(user => (
-                        <Select.Item key={user.id} value={user.id}>{user.name || user.email}</Select.Item>
-                    ))}
-                </Select.Content>
-            </Select.Root>
-        )}
-      */}
     </Flex>
   );
 };

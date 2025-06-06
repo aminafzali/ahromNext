@@ -1,308 +1,188 @@
 // app/checklists/list/page.tsx
 import React from "react";
 import prisma from "@/prisma/client";
-import { Flex, Grid, Heading, Text, Card, Box, Button as RadixButton } from "@radix-ui/themes";
-import Link from "next/link";
+import { Flex } from "@radix-ui/themes";
 import { getServerSession } from "next-auth";
-import authOptions from "@/app/auth/authOptions"; // مسیر authOptions خود را تنظیم کنید
-import { ChecklistAssignment, ChecklistTemplate, User, ResponseStatus, Prisma } from "@prisma/client";
-import ChecklistActions from "@/app/checklists/_components/ChecklistActions"; // مسیر کامپوننت اکشن‌ها
-import Pagination from "@/app/components/Pagination"; // مسیر کامپوننت صفحه‌بندی
-import NextLink from 'next/link';
-import { Table, Badge } from '@radix-ui/themes';
-import { ArrowUpIcon, EyeOpenIcon, Pencil2Icon } from "@radix-ui/react-icons";
-import ChecklistListClientFilters from "@/app/checklists/_components/ChecklistListClientFilters"; // ایمپورت کامپوننت فیلترها
+import authOptions from "@/app/auth/authOptions";
+import { ChecklistAssignment, ChecklistTemplate, User, ResponseStatus, Prisma, Category, Tag } from "@prisma/client";
+import ChecklistDisplayTabs from "./_components/ChecklistDisplayTabs";
 
-// تایپ برای الگو با تعداد آیتم‌ها
-type TemplateWithItemCount = Pick<ChecklistTemplate, 'id' | 'title'> & {
+// ========== تعریف تایپ‌ها (Types) ==========
+// این تایپ‌ها برای اطمینان از ارسال داده‌های صحیح به کامپوننت‌های کلاینت استفاده می‌شوند
+// و باید از این فایل export شوند تا در کامپوننت‌های دیگر قابل استفاده باشند.
+
+// تایپ برای الگو (Template) با جزئیات بیشتر (شامل تعداد آیتم‌ها، دسته‌بندی‌ها و برچسب‌ها)
+export type TemplateWithDetails = ChecklistTemplate & {
   _count: { items: number };
+  categories: Pick<Category, 'id' | 'name'>[];
+  tags: Pick<Tag, 'id' | 'name' | 'color'>[];
 };
 
-// تایپ برای داده‌های کامل‌تر چک‌لیست اختصاص داده شده
-// این تایپ در کامپوننت ChecklistAssignmentsTable استفاده می‌شود و می‌تواند همینجا بماند یا به فایل تایپ‌های مشترک منتقل شود.
-export type ExtendedChecklistAssignment = ChecklistAssignment & {
-  template: TemplateWithItemCount;
+// تایپ برای چک‌لیست اختصاص داده شده (Assignment) با جزئیات کامل
+export type ExtendedChecklistAssignment = Omit<ChecklistAssignment, 'template'> & {
+  template: Pick<TemplateWithDetails, 'id' | 'title' | '_count' | 'categories' | 'tags'>;
   assignedToUser: Pick<User, 'id' | 'name' | 'email'> | null;
   responses: { status: ResponseStatus }[];
 };
 
-// وضعیت‌های فیلتر (این تایپ باید از اینجا export شود تا در کامپوننت کلاینت قابل استفاده باشد)
+// وضعیت‌های ممکن برای فیلتر پاسخ‌ها
 const responseStatuses = ['all', 'open', 'completed', 'needsReview'] as const;
 export type ResponseFilterStatus = typeof responseStatuses[number];
 
-// تایپ برای پارامترهای جستجو (این تایپ باید از اینجا export شود)
+// رابط (Interface) برای تمام پارامترهای جستجو و فیلتر که از URL خوانده می‌شوند
 export interface ChecklistAssignmentQuery {
   responseStatus?: ResponseFilterStatus;
-  orderBy?: keyof Pick<ExtendedChecklistAssignment, 'assignedAt' | 'id'> | 'templateTitle' | 'assignedToUserName';
+  orderBy?: keyof Pick<ChecklistAssignment, 'assignedAt' | 'id' | 'dueDate'> | 'templateTitle' | 'assignedToUserName';
   page?: string;
-  assignedToUserId?: string; // می‌تواند 'me' یا یک userId یا 'all' باشد
+  assignedToUserId?: string;
+  tab?: 'templates' | 'assignments' | 'settings';
+  category?: string;
+  tag?: string;
+  templateStatus?: 'active' | 'archived' | 'all';
 }
 
+// پراپ‌های اصلی کامپوننت صفحه
 interface Props {
   searchParams: ChecklistAssignmentQuery;
 }
 
-// کامپوننت برای نمایش کارت‌های الگو
-const ChecklistTemplateCard = ({ template }: { template: Pick<ChecklistTemplate, 'id' | 'title' | 'description'> }) => {
-  return (
-    <Card variant="classic" style={{ height: '100%' }}>
-      <Flex direction="column" justify="between" style={{ height: '100%' }}>
-        <Box>
-          <Heading as="h3" size="4" mb="2" trim="start">
-            <Link href={`/checklists/templates/${template.id}`} className="hover:underline">
-              {template.title}
-            </Link>
-          </Heading>
-          <Text as="p" size="2" color="gray" className="line-clamp-3">
-            {template.description || "بدون توضیحات"}
-          </Text>
-        </Box>
-        <Flex mt="4" justify="end">
-          <RadixButton asChild variant="soft">
-            <Link href={`/checklists/templates/${template.id}`}>مشاهده و تخصیص</Link>
-          </RadixButton>
-        </Flex>
-      </Flex>
-    </Card>
-  );
-};
-
-// ستون‌های جدول چک‌لیست‌های اختصاص داده شده
-const assignmentTableColumns: {
-  label: string;
-  value: ChecklistAssignmentQuery['orderBy'];
-  className?: string;
-  isSortable?: boolean;
-}[] = [
-  { label: 'نام الگو', value: 'templateTitle', isSortable: true },
-  { label: 'اختصاص به', value: 'assignedToUserName', className: 'hidden md:table-cell', isSortable: true },
-  { label: 'تاریخ تخصیص', value: 'assignedAt', className: 'hidden md:table-cell', isSortable: true },
-  { label: 'وضعیت پاسخ', value: undefined, className: 'hidden md:table-cell', isSortable: false },
-  { label: 'عملیات', value: undefined, isSortable: false },
-];
-
-// کامپوننت برای جدول چک‌لیست‌های اختصاص داده شده
-const ChecklistAssignmentsTable = ({
-  assignments,
-  searchParams,
-  currentUserId,
-}: {
-  assignments: ExtendedChecklistAssignment[];
-  searchParams: ChecklistAssignmentQuery;
-  currentUserId: string | undefined;
-}) => {
-
-  const getAssignmentStatus = (assignment: ExtendedChecklistAssignment): { text: string; color: "gray" | "blue" | "green" | "red" } => {
-    const totalTemplateItems = assignment.template._count.items;
-    if (totalTemplateItems === 0) return { text: "الگو خالی", color: "gray" };
-
-    const unacceptableItems = assignment.responses.filter(r => r.status === ResponseStatus.UNACCEPTABLE).length;
-    if (unacceptableItems > 0) return { text: "نیاز به بررسی", color: "red"};
-
-    const noneItems = assignment.responses.filter(r => r.status === ResponseStatus.NONE).length;
-    if (noneItems === totalTemplateItems) return { text: "جدید", color: "gray" };
-    if (noneItems > 0) return { text: "در حال انجام", color: "blue" };
-
-    return { text: "تکمیل شده", color: "green" };
-  };
-
-  return (
-    <Table.Root variant="surface">
-      <Table.Header>
-        <Table.Row>
-          {assignmentTableColumns.map((column) => (
-            <Table.ColumnHeaderCell
-              key={column.label}
-              className={column.className}
-            >
-              {column.isSortable && column.value ? (
-                <NextLink
-                  href={{
-                    pathname: '/checklists/list',
-                    query: {
-                      ...searchParams,
-                      orderBy: column.value,
-                    },
-                  }}
-                >
-                  {column.label}
-                </NextLink>
-              ) : (
-                column.label
-              )}
-              {column.isSortable && column.value === searchParams.orderBy && (
-                <ArrowUpIcon className="inline ml-1 rtl:mr-1 rtl:ml-0" />
-              )}
-            </Table.ColumnHeaderCell>
-          ))}
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {assignments.map((assignment) => {
-          const status = getAssignmentStatus(assignment);
-          return (
-            <Table.Row key={assignment.id}>
-              <Table.Cell>
-                <Link href={`/checklists/templates/${assignment.template.id}`} className="hover:underline">
-                  {assignment.template.title}
-                </Link>
-                 <Text as="p" size="1" color="gray" className="md:hidden">به: {assignment.assignedToUser?.name || assignment.assignedToUser?.email || "نامشخص"}</Text>
-                 <Text as="p" size="1" color="gray" className="md:hidden">تاریخ: {new Date(assignment.assignedAt).toLocaleDateString('fa-IR')}</Text>
-                 <Box className="md:hidden mt-1"><Badge color={status.color}>{status.text}</Badge></Box>
-              </Table.Cell>
-              <Table.Cell className="hidden md:table-cell">
-                {assignment.assignedToUser?.name || assignment.assignedToUser?.email || "نامشخص"}
-              </Table.Cell>
-              <Table.Cell className="hidden md:table-cell">
-                {new Date(assignment.assignedAt).toLocaleDateString('fa-IR')}
-              </Table.Cell>
-              <Table.Cell className="hidden md:table-cell">
-                 <Badge color={status.color}>{status.text}</Badge>
-              </Table.Cell>
-              <Table.Cell>
-                {assignment.assignedToUserId === currentUserId ? (
-                  <RadixButton asChild variant="soft" size="1">
-                    <Link href={`/checklists/assignments/${assignment.id}/respond`}>
-                      <Pencil2Icon width="12" height="12" className="mr-1 rtl:ml-1 rtl:mr-0" /> پاسخ
-                    </Link>
-                  </RadixButton>
-                ) : (
-                  <RadixButton asChild variant="outline" color="gray" size="1">
-                    <Link href={`/checklists/assignments/${assignment.id}/view`}>
-                       <EyeOpenIcon width="12" height="12" className="mr-1 rtl:ml-1 rtl:mr-0" /> مشاهده
-                    </Link>
-                  </RadixButton>
-                )}
-              </Table.Cell>
-            </Table.Row>
-          );
-        })}
-      </Table.Body>
-    </Table.Root>
-  );
-};
-
+// ========== کامپوننت اصلی صفحه (Server Component) ==========
 const ChecklistsListPage = async ({ searchParams }: Props) => {
+  // دریافت اطلاعات کاربر فعلی از session
   const session = await getServerSession(authOptions);
   const currentUserId = session?.user?.id;
 
-  // خواندن الگوهای چک‌لیست
+  // --- ۱. خواندن داده‌ها برای تب "قالب‌های چک‌لیست" ---
+  const templateWhereClause: Prisma.ChecklistTemplateWhereInput = {};
+  if (searchParams.category && searchParams.category !== 'all') {
+    templateWhereClause.categories = { some: { name: searchParams.category } };
+  }
+  if (searchParams.tag && searchParams.tag !== 'all') {
+    templateWhereClause.tags = { some: { name: searchParams.tag } };
+  }
+  // فیلتر بر اساس وضعیت فعال یا آرشیو بودن الگو
+  if (searchParams.templateStatus === 'active' || !searchParams.templateStatus) {
+    templateWhereClause.isActive = true; // حالت پیش‌فرض: فقط فعال‌ها
+  } else if (searchParams.templateStatus === 'archived') {
+    templateWhereClause.isActive = false;
+  }
+  // اگر 'all' باشد، فیلتر isActive اعمال نمی‌شود و همه الگوها خوانده می‌شوند
+
   const templates = await prisma.checklistTemplate.findMany({
+    where: templateWhereClause,
     orderBy: { createdAt: 'desc' },
-    select: { id: true, title: true, description: true } // فقط فیلدهای مورد نیاز برای کارت
+    // استفاده از include برای خواندن تمام فیلدهای الگو و روابط مربوطه
+    include: {
+      _count: { select: { items: true } },
+      categories: { select: { id: true, name: true } },
+      tags: { select: { id: true, name: true, color: true } },
+    }
   });
 
-  // پارامترهای صفحه‌بندی و مرتب‌سازی برای چک‌لیست‌های اختصاص داده شده
+  // --- ۲. خواندن داده‌ها برای تب "چک‌لیست‌های اختصاص داده شده" ---
   const page = parseInt(searchParams.page || '1') || 1;
   const pageSize = 10;
 
   let orderByClause: Prisma.ChecklistAssignmentOrderByWithRelationInput = { assignedAt: 'desc' };
   if (searchParams.orderBy) {
-    if (searchParams.orderBy === 'templateTitle') {
-      orderByClause = { template: { title: 'asc' } };
-    } else if (searchParams.orderBy === 'assignedToUserName') {
-      orderByClause = { assignedToUser: { name: 'asc' } }; 
-    } else if (['assignedAt', 'id'].includes(searchParams.orderBy as string)) {
-       orderByClause = { [searchParams.orderBy]: 'asc' };
-    }
+    if (searchParams.orderBy === 'templateTitle') orderByClause = { template: { title: 'asc' } };
+    else if (searchParams.orderBy === 'assignedToUserName') orderByClause = { assignedToUser: { name: 'asc' } };
+    else if (searchParams.orderBy === 'dueDate') orderByClause = { dueDate: 'asc' };
+    else if (['assignedAt', 'id'].includes(searchParams.orderBy as string)) orderByClause = { [searchParams.orderBy]: 'asc' };
   }
 
-  const whereClause: Prisma.ChecklistAssignmentWhereInput = {};
+  const assignmentWhereClause: Prisma.ChecklistAssignmentWhereInput = {};
   if (searchParams.assignedToUserId === 'me' && currentUserId) {
-    whereClause.assignedToUserId = currentUserId;
+    assignmentWhereClause.assignedToUserId = currentUserId;
   } else if (searchParams.assignedToUserId && searchParams.assignedToUserId !== 'all' && searchParams.assignedToUserId !== 'me') {
-    whereClause.assignedToUserId = searchParams.assignedToUserId;
+    assignmentWhereClause.assignedToUserId = searchParams.assignedToUserId;
+  }
+  
+  // اعمال فیلترهای دسته‌بندی و برچسب بر اساس الگوی والد
+  const templateFiltersForAssignmentsTab: Prisma.ChecklistTemplateWhereInput = {};
+  if (searchParams.category && searchParams.category !== 'all') {
+      templateFiltersForAssignmentsTab.categories = { some: { name: searchParams.category } };
+  }
+  if (searchParams.tag && searchParams.tag !== 'all') {
+      templateFiltersForAssignmentsTab.tags = { some: { name: searchParams.tag } };
+  }
+  if (Object.keys(templateFiltersForAssignmentsTab).length > 0) {
+      assignmentWhereClause.template = templateFiltersForAssignmentsTab;
   }
 
+  // اعمال فیلتر وضعیت پاسخ
   if (searchParams.responseStatus && searchParams.responseStatus !== 'all') {
     switch (searchParams.responseStatus) {
-      case 'open': 
-        whereClause.AND = [
-          ...(whereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
-          { responses: { some: { status: ResponseStatus.NONE } } }, 
-          { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } }, 
+      case 'open':
+        assignmentWhereClause.AND = [
+          ...(assignmentWhereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
+          { responses: { some: { status: ResponseStatus.NONE } } },
+          { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } },
         ];
         break;
-      case 'completed': 
-        whereClause.AND = [
-          ...(whereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
-          { responses: { every: { status: { not: ResponseStatus.NONE } } } }, 
-          { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } }, 
+      case 'completed':
+        assignmentWhereClause.AND = [
+          ...(assignmentWhereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
+          { responses: { every: { status: { not: ResponseStatus.NONE } } } },
+          { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } },
         ];
         break;
-      case 'needsReview': 
-        whereClause.responses = { some: { status: ResponseStatus.UNACCEPTABLE } };
+      case 'needsReview':
+        assignmentWhereClause.responses = { some: { status: ResponseStatus.UNACCEPTABLE } };
         break;
     }
   }
 
   const assignments = await prisma.checklistAssignment.findMany({
-    where: whereClause,
+    where: assignmentWhereClause,
     include: {
-      template: { select: { id: true, title: true, _count: { select: { items: true } } } },
+      template: { 
+        include: { 
+          categories: { select: { id: true, name: true } },
+          tags: { select: { id: true, name: true, color: true } },
+          _count: { select: { items: true } },
+        } 
+      },
       assignedToUser: { select: { id: true, name: true, email: true } },
-      responses: { select: { status: true } }, 
+      responses: { select: { status: true } },
     },
     orderBy: orderByClause,
     skip: (page - 1) * pageSize,
     take: pageSize,
   });
+  const assignmentCount = await prisma.checklistAssignment.count({ where: assignmentWhereClause });
 
-  const assignmentCount = await prisma.checklistAssignment.count({ where: whereClause });
+  // --- ۳. خواندن داده‌های لازم برای فیلترها و کامپوننت‌های دیگر ---
+  const allCategories = await prisma.category.findMany({ 
+    select: { id: true, name: true, parentId: true }, 
+    orderBy: { name: 'asc'} 
+  });
+  const allTags = await prisma.tag.findMany({ 
+    select: { id: true, name: true, color: true }, 
+    orderBy: {name: 'asc'} 
+  });
+
+  const defaultTab = searchParams.tab || "templates";
 
   return (
-    <Flex direction="column" gap="5" className="p-4 md:p-6">
-      <ChecklistActions />
-
-      <Box>
-        <Heading as="h2" size="6" mb="4">
-          قالب‌های چک‌لیست
-        </Heading>
-        {templates.length === 0 && (
-          <Text color="gray">هنوز هیچ قالب چک‌لیستی ساخته نشده است.</Text>
-        )}
-        <Grid columns={{ initial: '1', sm: '2', md: '3' }} gap="4">
-          {templates.map((template) => (
-            <ChecklistTemplateCard key={template.id} template={template} />
-          ))}
-        </Grid>
-      </Box>
-
-      <Box mt="6">
-        <Flex direction={{initial: 'column', sm: 'row'}} justify="between" align={{initial: 'stretch', sm: 'center'}} gap="3" mb="3">
-            <Heading as="h2" size="6">
-            چک‌لیست‌های اختصاص داده شده
-            </Heading>
-            <ChecklistListClientFilters searchParams={searchParams} />
-        </Flex>
-
-        {assignments.length === 0 && (
-           // اصلاح خطا: استفاده از Box به جای Text برای پراپرتی display
-           <Box mt="3" style={{ display: 'block' }}>
-            <Text color="gray">هیچ چک‌لیستی با فیلترهای انتخابی یافت نشد.</Text>
-           </Box>
-        )}
-        {assignments.length > 0 && (
-          <>
-            <ChecklistAssignmentsTable
-              assignments={assignments}
-              searchParams={searchParams} 
-              currentUserId={currentUserId}
-            />
-            <Flex justify="center" mt="4">
-              <Pagination
-                itemCount={assignmentCount}
-                pageSize={pageSize}
-                currentPage={page}
-              />
-            </Flex>
-          </>
-        )}
-      </Box>
+    <Flex direction="column" gap="0" className="p-4 md:p-6">
+      {/* پاس دادن تمام داده‌های خوانده شده به کامپوننت کلاینت برای نمایش */}
+      <ChecklistDisplayTabs
+        templates={templates as TemplateWithDetails[]}
+        allCategories={allCategories}
+        allTags={allTags}
+        assignments={assignments as ExtendedChecklistAssignment[]}
+        assignmentCount={assignmentCount}
+        searchParams={searchParams}
+        currentUserId={currentUserId}
+        pageSize={pageSize}
+        currentPage={page}
+        defaultTab={defaultTab as 'templates' | 'assignments' | 'settings'}
+      />
     </Flex>
   );
 };
 
-export const dynamic = 'force-dynamic'; 
+export const dynamic = 'force-dynamic';
 
 export default ChecklistsListPage;
