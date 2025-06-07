@@ -1,3 +1,8 @@
+// ===============================================
+// Prisma Schema - نسخه نهایی و کامل
+// آخرین به‌روزرسانی: بر اساس درخواست‌های کامل کاربر
+// ===============================================
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,34 +13,32 @@ datasource db {
   relationMode = "prisma"
 }
 
-model Issue {
-  id               Int                 @id @default(autoincrement())
-  title            String              @db.VarChar(255)
-  description      String              @db.Text
-  status           Status              @default(OPEN)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  assignedToUserId String?             @db.VarChar(255)
-  assignedToUser   User?               @relation(fields: [assignedToUserId], references: [id])
-  responses        ChecklistResponse[] @relation("ResponseIssues")
-
-  @@index([assignedToUserId])
-}
-
+// === مدل اصلی: الگوی چک‌لیست ===
 model ChecklistTemplate {
-  id          Int                   @id @default(autoincrement())
-  title       String                @db.VarChar(255)
-  description String                @db.Text
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  isActive    Boolean  @default(true) // برای قابلیت آرشیو کردن
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // اصلاح: ارتباط با کاربر ایجادکننده اختیاری شد تا migration روی داده‌های موجود با موفقیت اجرا شود
+  createdByUserId String? @db.VarChar(255)
+  createdByUser   User?   @relation("CreatedTemplates", fields: [createdByUserId], references: [id])
+
+  // ارتباطات با سایر مدل‌ها
   items       ChecklistItem[]
   assignments ChecklistAssignment[]
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  categories  Category[]            @relation("ChecklistTemplateCategories")
-  tags        Tag[]                 @relation("ChecklistTemplateTags")
-  isActive    Boolean               @default(true)
+
+  // ارتباط با جدول‌های واسط برای روابط چندبه‌چند
+  categories CategoryOnChecklistTemplates[]
+  tags       TagOnChecklistTemplates[]
 
   @@index([isActive])
+  @@index([createdByUserId])
 }
+
+// === مدل‌های طبقه‌بندی ===
 
 model Category {
   id   Int    @id @default(autoincrement())
@@ -43,25 +46,58 @@ model Category {
 
   // فیلدهای لازم برای ساختار درختی
   parentId Int?
-  // اصلاح شده برای جلوگیری از خطای Prisma در روابط خودارجاع
   parent   Category?  @relation("ParentChild", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children Category[] @relation("ParentChild")
 
-  templates ChecklistTemplate[] @relation("ChecklistTemplateCategories")
+  // ارتباط با جدول واسط
+  templates CategoryOnChecklistTemplates[]
 
   @@index([name])
-  @@index([parentId]) // اصلاح: اضافه کردن ایندکس برای بهبود عملکرد
+  @@index([parentId])
 }
 
 model Tag {
-  id        Int                 @id @default(autoincrement())
-  name      String              @unique @db.VarChar(50)
-  // اضافه شدن فیلد رنگ
-  color     String              @default("gray") @db.VarChar(20)
-  templates ChecklistTemplate[] @relation("ChecklistTemplateTags")
+  id    Int    @id @default(autoincrement())
+  name  String @unique @db.VarChar(50)
+  color String @default("gray") @db.VarChar(20) // فیلد برای رنگ برچسب
+
+  // ارتباط با جدول واسط
+  templates TagOnChecklistTemplates[]
 
   @@index([name])
 }
+
+// === جدول‌های واسط (Join Tables) برای روابط چندبه‌چند صریح ===
+
+model CategoryOnChecklistTemplates {
+  checklistTemplateId Int
+  categoryId          Int
+  assignedAt          DateTime @default(now())
+
+  checklistTemplate ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
+  category          Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([checklistTemplateId, categoryId])
+  // اصلاح: اضافه کردن ایندکس‌های لازم برای بهبود عملکرد
+  @@index([checklistTemplateId])
+  @@index([categoryId])
+}
+
+model TagOnChecklistTemplates {
+  checklistTemplateId Int
+  tagId               Int
+  assignedAt          DateTime @default(now())
+
+  checklistTemplate ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
+  tag               Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([checklistTemplateId, tagId])
+  // اصلاح: اضافه کردن ایندکس‌های لازم برای بهبود عملکرد
+  @@index([checklistTemplateId])
+  @@index([tagId])
+}
+
+// === مدل‌های وابسته به چک‌لیست ===
 
 model ChecklistItem {
   id          Int                 @id @default(autoincrement())
@@ -79,14 +115,11 @@ model ChecklistItem {
 model ChecklistAssignment {
   id               Int                 @id @default(autoincrement())
   templateId       Int
-  // اصلاح: onDelete: Cascade به onDelete: Restrict تغییر کرد
-  // این کار از حذف الگو در صورتی که تخصیصی داشته باشد، جلوگیری می‌کند.
   template         ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   assignedToUserId String              @db.VarChar(255)
   assignedToUser   User                @relation(fields: [assignedToUserId], references: [id])
   responses        ChecklistResponse[]
   assignedAt       DateTime            @default(now())
-  // اضافه شدن تاریخ سررسید
   dueDate          DateTime?
 
   @@index([templateId])
@@ -107,16 +140,33 @@ model ChecklistResponse {
   @@index([itemId])
 }
 
-enum Status {
-  OPEN
-  IN_PROGRESS
-  CLOSED
+model Issue {
+  id               Int                 @id @default(autoincrement())
+  title            String              @db.VarChar(255)
+  description      String              @db.Text
+  status           Status              @default(OPEN)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  assignedToUserId String?             @db.VarChar(255)
+  assignedToUser   User?               @relation(fields: [assignedToUserId], references: [id])
+  responses        ChecklistResponse[] @relation("ResponseIssues")
+
+  @@index([assignedToUserId])
 }
 
-enum ResponseStatus {
-  NONE
-  ACCEPTABLE
-  UNACCEPTABLE
+// === مدل‌های مربوط به کاربران و احراز هویت ===
+
+model User {
+  id                   String                @id @default(cuid())
+  name                 String?
+  email                String?               @unique
+  emailVerified        DateTime?
+  image                String?
+  accounts             Account[]
+  sessions             Session[]
+  assignedIssues       Issue[]
+  checklistAssignments ChecklistAssignment[]
+  createdTemplates     ChecklistTemplate[]   @relation("CreatedTemplates")
 }
 
 model Account {
@@ -132,8 +182,7 @@ model Account {
   scope             String?
   id_token          String? @db.Text
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -149,22 +198,24 @@ model Session {
   @@index([userId])
 }
 
-model User {
-  id                   String                @id @default(cuid())
-  name                 String?
-  email                String?               @unique
-  emailVerified        DateTime?
-  image                String?
-  accounts             Account[]
-  sessions             Session[]
-  assignedIssues       Issue[]
-  checklistAssignments ChecklistAssignment[]
-}
-
 model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// === Enum ها ===
+
+enum Status {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+enum ResponseStatus {
+  NONE
+  ACCEPTABLE
+  UNACCEPTABLE
 }

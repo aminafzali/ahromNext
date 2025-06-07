@@ -166,7 +166,7 @@ const AssignChecklistForm = ({ templateId, users }: Props) => {
               <Select.Trigger 
                 id={`assign-user-${templateId}-select`}
                 placeholder="یک کاربر را انتخاب کنید..." 
-                className="w-full dark:bg-gray-700 dark:text-white dark:border-gray-600 text-right" 
+                className=" dark:bg-gray-700 dark:text-white dark:border-gray-600 text-right" 
               />
               <Select.Content className="dark:bg-gray-800">
                 <Select.Group>

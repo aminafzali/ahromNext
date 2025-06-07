@@ -4,28 +4,37 @@ import prisma from "@/prisma/client";
 import { Flex } from "@radix-ui/themes";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
-import { ChecklistAssignment, ChecklistTemplate, User, ResponseStatus, Prisma, Category, Tag } from "@prisma/client";
+import { 
+  ChecklistAssignment, 
+  ChecklistTemplate, 
+  User, 
+  ResponseStatus, 
+  Prisma, 
+  Category, 
+  Tag,
+  CategoryOnChecklistTemplates,
+  TagOnChecklistTemplates
+} from "@prisma/client";
 import ChecklistDisplayTabs from "./_components/ChecklistDisplayTabs";
 
 // ========== تعریف تایپ‌ها (Types) ==========
-// این تایپ‌ها برای اطمینان از ارسال داده‌های صحیح به کامپوننت‌های کلاینت استفاده می‌شوند
+// این تایپ‌ها ساختار دقیق داده‌هایی که از سرور به کلاینت ارسال می‌شود را مشخص می‌کنند.
 // و باید از این فایل export شوند تا در کامپوننت‌های دیگر قابل استفاده باشند.
 
-// تایپ برای الگو (Template) با جزئیات بیشتر (شامل تعداد آیتم‌ها، دسته‌بندی‌ها و برچسب‌ها)
+// تایپ برای الگو (Template) با جزئیات کامل، با در نظر گرفتن جدول واسط صریح
 export type TemplateWithDetails = ChecklistTemplate & {
   _count: { items: number };
-  categories: Pick<Category, 'id' | 'name'>[];
-  tags: Pick<Tag, 'id' | 'name' | 'color'>[];
+  categories: (CategoryOnChecklistTemplates & { category: Pick<Category, 'id' | 'name'> })[];
+  tags: (TagOnChecklistTemplates & { tag: Pick<Tag, 'id' | 'name' | 'color'> })[];
 };
 
 // تایپ برای چک‌لیست اختصاص داده شده (Assignment) با جزئیات کامل
-export type ExtendedChecklistAssignment = Omit<ChecklistAssignment, 'template'> & {
-  template: Pick<TemplateWithDetails, 'id' | 'title' | '_count' | 'categories' | 'tags'>;
+export type ExtendedChecklistAssignment = ChecklistAssignment & {
+  template: TemplateWithDetails;
   assignedToUser: Pick<User, 'id' | 'name' | 'email'> | null;
   responses: { status: ResponseStatus }[];
 };
 
-// وضعیت‌های ممکن برای فیلتر پاسخ‌ها
 const responseStatuses = ['all', 'open', 'completed', 'needsReview'] as const;
 export type ResponseFilterStatus = typeof responseStatuses[number];
 
@@ -41,41 +50,36 @@ export interface ChecklistAssignmentQuery {
   templateStatus?: 'active' | 'archived' | 'all';
 }
 
-// پراپ‌های اصلی کامپوننت صفحه
 interface Props {
   searchParams: ChecklistAssignmentQuery;
 }
 
 // ========== کامپوننت اصلی صفحه (Server Component) ==========
 const ChecklistsListPage = async ({ searchParams }: Props) => {
-  // دریافت اطلاعات کاربر فعلی از session
   const session = await getServerSession(authOptions);
   const currentUserId = session?.user?.id;
 
   // --- ۱. خواندن داده‌ها برای تب "قالب‌های چک‌لیست" ---
   const templateWhereClause: Prisma.ChecklistTemplateWhereInput = {};
   if (searchParams.category && searchParams.category !== 'all') {
-    templateWhereClause.categories = { some: { name: searchParams.category } };
+    templateWhereClause.categories = { some: { category: { name: searchParams.category } } };
   }
   if (searchParams.tag && searchParams.tag !== 'all') {
-    templateWhereClause.tags = { some: { name: searchParams.tag } };
+    templateWhereClause.tags = { some: { tag: { name: searchParams.tag } } };
   }
-  // فیلتر بر اساس وضعیت فعال یا آرشیو بودن الگو
   if (searchParams.templateStatus === 'active' || !searchParams.templateStatus) {
-    templateWhereClause.isActive = true; // حالت پیش‌فرض: فقط فعال‌ها
+    templateWhereClause.isActive = true;
   } else if (searchParams.templateStatus === 'archived') {
     templateWhereClause.isActive = false;
   }
-  // اگر 'all' باشد، فیلتر isActive اعمال نمی‌شود و همه الگوها خوانده می‌شوند
 
   const templates = await prisma.checklistTemplate.findMany({
     where: templateWhereClause,
     orderBy: { createdAt: 'desc' },
-    // استفاده از include برای خواندن تمام فیلدهای الگو و روابط مربوطه
     include: {
       _count: { select: { items: true } },
-      categories: { select: { id: true, name: true } },
-      tags: { select: { id: true, name: true, color: true } },
+      categories: { include: { category: { select: { id: true, name: true } } } },
+      tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
     }
   });
 
@@ -98,31 +102,29 @@ const ChecklistsListPage = async ({ searchParams }: Props) => {
     assignmentWhereClause.assignedToUserId = searchParams.assignedToUserId;
   }
   
-  // اعمال فیلترهای دسته‌بندی و برچسب بر اساس الگوی والد
   const templateFiltersForAssignmentsTab: Prisma.ChecklistTemplateWhereInput = {};
   if (searchParams.category && searchParams.category !== 'all') {
-      templateFiltersForAssignmentsTab.categories = { some: { name: searchParams.category } };
+      templateFiltersForAssignmentsTab.categories = { some: { category: { name: searchParams.category } } };
   }
   if (searchParams.tag && searchParams.tag !== 'all') {
-      templateFiltersForAssignmentsTab.tags = { some: { name: searchParams.tag } };
+      templateFiltersForAssignmentsTab.tags = { some: { tag: { name: searchParams.tag } } };
   }
   if (Object.keys(templateFiltersForAssignmentsTab).length > 0) {
       assignmentWhereClause.template = templateFiltersForAssignmentsTab;
   }
 
-  // اعمال فیلتر وضعیت پاسخ
   if (searchParams.responseStatus && searchParams.responseStatus !== 'all') {
     switch (searchParams.responseStatus) {
       case 'open':
         assignmentWhereClause.AND = [
-          ...(assignmentWhereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
+          ...(Array.isArray(assignmentWhereClause.AND) ? assignmentWhereClause.AND : []),
           { responses: { some: { status: ResponseStatus.NONE } } },
           { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } },
         ];
         break;
       case 'completed':
         assignmentWhereClause.AND = [
-          ...(assignmentWhereClause.AND as Prisma.ChecklistAssignmentWhereInput[] || []),
+          ...(Array.isArray(assignmentWhereClause.AND) ? assignmentWhereClause.AND : []),
           { responses: { every: { status: { not: ResponseStatus.NONE } } } },
           { responses: { none: { status: ResponseStatus.UNACCEPTABLE } } },
         ];
@@ -136,13 +138,7 @@ const ChecklistsListPage = async ({ searchParams }: Props) => {
   const assignments = await prisma.checklistAssignment.findMany({
     where: assignmentWhereClause,
     include: {
-      template: { 
-        include: { 
-          categories: { select: { id: true, name: true } },
-          tags: { select: { id: true, name: true, color: true } },
-          _count: { select: { items: true } },
-        } 
-      },
+      template: { include: { _count: { select: { items: true } }, categories: { include: { category: true } }, tags: { include: { tag: true } } } },
       assignedToUser: { select: { id: true, name: true, email: true } },
       responses: { select: { status: true } },
     },
@@ -153,25 +149,18 @@ const ChecklistsListPage = async ({ searchParams }: Props) => {
   const assignmentCount = await prisma.checklistAssignment.count({ where: assignmentWhereClause });
 
   // --- ۳. خواندن داده‌های لازم برای فیلترها و کامپوننت‌های دیگر ---
-  const allCategories = await prisma.category.findMany({ 
-    select: { id: true, name: true, parentId: true }, 
-    orderBy: { name: 'asc'} 
-  });
-  const allTags = await prisma.tag.findMany({ 
-    select: { id: true, name: true, color: true }, 
-    orderBy: {name: 'asc'} 
-  });
+  const allCategories = await prisma.category.findMany({ select: { id: true, name: true, parentId: true }, orderBy: { name: 'asc'} });
+  const allTags = await prisma.tag.findMany({ select: { id: true, name: true, color: true }, orderBy: {name: 'asc'} });
 
   const defaultTab = searchParams.tab || "templates";
 
   return (
     <Flex direction="column" gap="0" className="p-4 md:p-6">
-      {/* پاس دادن تمام داده‌های خوانده شده به کامپوننت کلاینت برای نمایش */}
       <ChecklistDisplayTabs
-        templates={templates as TemplateWithDetails[]}
+        templates={templates as any}
         allCategories={allCategories}
         allTags={allTags}
-        assignments={assignments as ExtendedChecklistAssignment[]}
+        assignments={assignments as any}
         assignmentCount={assignmentCount}
         searchParams={searchParams}
         currentUserId={currentUserId}

@@ -1,39 +1,54 @@
 // app/checklists/templates/[templateId]/page.tsx
+import React from 'react';
 import prisma from '@/prisma/client';
 import { notFound, redirect } from 'next/navigation';
-import React from 'react';
-import { Heading, Box, Flex, Button as RadixButton, Callout } from '@radix-ui/themes';
-import { ChecklistItem, ChecklistTemplate as PrismaChecklistTemplate, User, Category, Tag } from '@prisma/client';
+import { Heading, Box, Flex, Button as RadixButton } from '@radix-ui/themes';
 import Link from 'next/link';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-// ایمپورت کامپوننت کلاینت جدید برای تب‌ها
-import TemplateDetailClientTabs, { ChecklistTemplateFull } from './_components/TemplateDetailClientTabs'; 
-
-// تایپ ChecklistTemplateFull به کامپوننت کلاینت منتقل شد و از آنجا export می‌شود
+// ایمپورت کامپوننت کلاینت و تایپ‌های آن از فایل‌های مربوطه
+import TemplateDetailClientTabs from './_components/TemplateDetailClientTabs';
+import { FullChecklistTemplate } from '@/app/checklists/types'; // ایمپورت تایپ از فایل types.ts
 
 interface Props {
   params: { templateId: string };
   searchParams: { tab?: string };
 }
 
+// ========== کامپوننت اصلی صفحه (Server Component) ==========
 const ChecklistTemplateDetailPage = async ({ params, searchParams }: Props) => {
+  // ۱. بررسی احراز هویت کاربر
   const session = await getServerSession(authOptions);
   if (!session) {
     redirect(`/api/auth/signin?callbackUrl=/checklists/templates/${params.templateId}`);
   }
 
+  // ۲. اعتبارسنجی شناسه الگو
   const templateId = parseInt(params.templateId);
   if (isNaN(templateId)) {
     notFound();
   }
 
+  // ۳. خواندن داده‌های کامل الگو از دیتابیس
+  // این کوئری تمام فیلدهای لازم از جمله templateId در آیتم‌ها را برمی‌گرداند
   const template = await prisma.checklistTemplate.findUnique({
     where: { id: templateId },
     include: {
       items: { orderBy: { order: 'asc' } },
-      categories: { select: { id: true, name: true } },
-      tags: { select: { id: true, name: true } },
+      categories: {
+        include: {
+          category: {
+            select: { id: true, name: true }
+          }
+        }
+      },
+      tags: {
+        include: {
+          tag: {
+            select: { id: true, name: true, color: true }
+          }
+        }
+      },
     },
   });
 
@@ -41,20 +56,23 @@ const ChecklistTemplateDetailPage = async ({ params, searchParams }: Props) => {
     notFound();
   }
 
+  // ۴. خواندن لیست تمام کاربران، دسته‌بندی‌ها و برچسب‌ها برای پاس دادن به فرم‌ها
   const users = await prisma.user.findMany({
     select: { id: true, name: true, email: true },
     orderBy: { name: 'asc' },
   });
+
   const allCategories = await prisma.category.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  });
-  const allTags = await prisma.tag.findMany({
-    select: { id: true, name: true },
+    select: { id: true, name: true }, // فقط فیلدهای لازم برای لیست انتخاب
     orderBy: { name: 'asc' },
   });
 
-  // تعیین تب فعال پیش‌فرض از searchParams یا "view"
+  const allTags = await prisma.tag.findMany({
+    select: { id: true, name: true, color: true },
+    orderBy: { name: 'asc' },
+  });
+
+  // ۵. تعیین تب فعال پیش‌فرض بر اساس پارامتر URL
   const defaultTab = (searchParams.tab === 'edit' || searchParams.tab === 'assign' || searchParams.tab === 'view') 
                      ? searchParams.tab 
                      : "view";
@@ -70,9 +88,9 @@ const ChecklistTemplateDetailPage = async ({ params, searchParams }: Props) => {
         </RadixButton>
       </Flex>
 
-      {/* استفاده از کامپوننت کلاینت برای نمایش تب‌ها */}
+      {/* ۶. رندر کردن کامپوننت کلاینت و پاس دادن تمام داده‌های خوانده شده به آن */}
       <TemplateDetailClientTabs
-        template={template as ChecklistTemplateFull} // Cast به تایپ صحیح
+        template={template as FullChecklistTemplate} // با اصلاح تایپ، این Cast اکنون صحیح است
         allUsers={users}
         allCategories={allCategories}
         allTags={allTags}

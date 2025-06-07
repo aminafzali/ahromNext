@@ -2,28 +2,33 @@
 "use client";
 
 import React from 'react';
-import { Heading, Text, Box, Flex, Card, Separator, Button as RadixButton, Tabs, Badge } from '@radix-ui/themes';
+import { Heading, Text, Box, Flex, Card, Separator, Button as RadixButton, Tabs, Badge, Tooltip } from '@radix-ui/themes';
 import Link from 'next/link';
-import { ChecklistItem, ChecklistTemplate as PrismaChecklistTemplate, User, Category, Tag } from '@prisma/client';
-import AssignChecklistForm from './AssignChecklistForm'; // مسیر صحیح را بررسی کنید
-import EditTemplateDetailsForm from './EditTemplateDetailsForm'; // مسیر صحیح را بررسی کنید
-import { EyeOpenIcon, Pencil1Icon, CalendarIcon } from '@radix-ui/react-icons';
+import { ChecklistItem, ChecklistTemplate as PrismaChecklistTemplate, User, Category, Tag, CategoryOnChecklistTemplates, TagOnChecklistTemplates } from '@prisma/client';
+import AssignChecklistForm from './AssignChecklistForm';
+import EditTemplateDetailsForm from './EditTemplateDetailsForm';
+import { EyeOpenIcon, Pencil1Icon, CalendarIcon, ReaderIcon, BookmarkIcon } from '@radix-ui/react-icons';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+// ========== تعریف تایپ‌ها (Types) ==========
+// این تایپ‌ها برای اطمینان از ارسال داده‌های صحیح از کامپوننت سرور به این کامپوننت کلاینت استفاده می‌شوند.
+// این تایپ‌ها ساختار جدول واسط صریح را منعکس می‌کنند.
 
 export type ChecklistTemplateFull = PrismaChecklistTemplate & {
   items: ChecklistItem[];
-  categories: Pick<Category, 'id' | 'name'>[];
-  tags: Pick<Tag, 'id' | 'name'>[];
+  categories: (CategoryOnChecklistTemplates & { category: Pick<Category, 'id' | 'name'> })[];
+  tags: (TagOnChecklistTemplates & { tag: Pick<Tag, 'id' | 'name' | 'color'> })[];
 };
 
 interface TemplateDetailClientTabsProps {
   template: ChecklistTemplateFull;
   allUsers: Pick<User, 'id' | 'name' | 'email'>[];
   allCategories: Pick<Category, 'id' | 'name'>[];
-  allTags: Pick<Tag, 'id' | 'name'>[];
+  allTags: Pick<Tag, 'id' | 'name' | 'color'>[];
   defaultTab: 'view' | 'edit' | 'assign';
 }
 
+// ========== کامپوننت اصلی ==========
 const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
   template,
   allUsers,
@@ -34,10 +39,11 @@ const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
   const router = useRouter();
   const currentSearchParams = useSearchParams();
 
+  // تابعی برای تغییر تب که URL را نیز به‌روز می‌کند
   const handleTabChange = (value: string) => {
     const params = new URLSearchParams(currentSearchParams.toString());
     params.set('tab', value);
-    // برای جلوگیری از اسکرول به بالای صفحه هنگام تغییر تب، scroll: false اضافه شد
+    // برای جلوگیری از پرش صفحه هنگام تغییر تب، از scroll: false استفاده می‌کنیم
     router.push(`/checklists/templates/${template.id}?${params.toString()}`, { scroll: false });
   };
 
@@ -59,12 +65,16 @@ const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
       </Tabs.List>
 
       <Box pt="3">
+        {/* === تب مشاهده الگو === */}
         <Tabs.Content value="view">
-          <Card variant="surface" className="shadow-md rounded-lg dark:bg-gray-800/80 backdrop-blur-sm">
+          <Card variant="surface" className="shadow-lg rounded-lg dark:bg-gray-800/80 backdrop-blur-sm">
             <Box p="5">
-              <Heading as="h2" size="6" mb="2" className="text-gray-700 dark:text-gray-200 border-b pb-2 dark:border-gray-700">
-                {template.title}
-              </Heading>
+              <Flex justify="between" align="start">
+                <Heading as="h2" size="6" mb="2" className="text-gray-800 dark:text-gray-100 border-b pb-2 dark:border-gray-700">
+                  {template.title}
+                </Heading>
+                {!template.isActive && <Badge color="gray" variant="solid" radius="full">آرشیو شده</Badge>}
+              </Flex>
               <Text as="p" color="gray" size="3" mb="4" className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
                 {template.description || 'بدون توضیحات.'}
               </Text>
@@ -73,7 +83,7 @@ const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
                 <Flex align="center" gap="2" mb="2">
                   <Text weight="bold" size="2" className="text-gray-600 dark:text-gray-300">دسته‌بندی‌ها:</Text>
                   <Flex wrap="wrap" gap="1">
-                    {template.categories.map(cat => <Badge key={cat.id} color="purple" variant="soft" radius="full">{cat.name}</Badge>)}
+                    {template.categories.map(c => <Badge key={c.categoryId} color="purple" variant="soft" radius="full">{c.category.name}</Badge>)}
                   </Flex>
                 </Flex>
               )}
@@ -81,7 +91,7 @@ const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
                 <Flex align="center" gap="2" mb="4">
                   <Text weight="bold" size="2" className="text-gray-600 dark:text-gray-300">برچسب‌ها:</Text>
                   <Flex wrap="wrap" gap="1">
-                    {template.tags.map(tag => <Badge key={tag.id} color="teal" variant="soft" radius="full">{tag.name}</Badge>)}
+                    {template.tags.map(t => <Badge key={t.tagId} color={t.tag.color as any} variant="soft" radius="full">{t.tag.name}</Badge>)}
                   </Flex>
                 </Flex>
               )}
@@ -112,17 +122,18 @@ const TemplateDetailClientTabs: React.FC<TemplateDetailClientTabsProps> = ({
           </Card>
         </Tabs.Content>
 
+        {/* === تب ویرایش جزئیات === */}
         <Tabs.Content value="edit">
           <EditTemplateDetailsForm 
-            template={template}
+            template={template as any} // Cast موقت برای سازگاری با پراپ‌های EditTemplateDetailsForm
             allCategories={allCategories}
             allTags={allTags}
           />
         </Tabs.Content>
 
+        {/* === تب تخصیص الگو === */}
         <Tabs.Content value="assign">
-          {/* اصلاح: حذف Card و تنظیم padding برای Box */}
-          <Box p={{initial: "0", sm: "5"}} className="bg-white dark:bg-gray-800/50 shadow-sm rounded-lg border border-gray-200 dark:border-gray-700"> {/* اضافه کردن استایل به Box */}
+          <Box p={{initial: "0", sm: "5"}} className="bg-white dark:bg-gray-800/50 shadow-sm rounded-lg border border-gray-200 dark:border-gray-700">
               <Heading as="h3" size="5" mb="4" className="text-gray-700 dark:text-gray-200 text-center sm:text-right">تخصیص این الگو به کاربر</Heading>
               <AssignChecklistForm templateId={template.id} users={allUsers} />
           </Box>

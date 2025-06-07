@@ -3,7 +3,7 @@ import React from 'react'
 //todo: بررسی شود
 const assigmentViewPage = () => {
   return (
-    <div>assigmentViewPage</div>
+    <div> طرحی برای این صفحه وجود ندارد لطفا به پشتیبانی اطلاع بدهید</div>
   )
 }
 
