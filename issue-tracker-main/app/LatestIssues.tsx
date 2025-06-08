@@ -9,7 +9,7 @@ const LatestIssues = async () => {
     orderBy: { createdAt: 'desc' },
     take: 5,
     include: {
-      assignedToUser: true,
+      assignedUsers: true,
     },
   });
 
@@ -28,9 +28,9 @@ const LatestIssues = async () => {
                     </Link>
                     <IssueStatusBadge status={issue.status} />
                   </Flex>
-                  {issue.assignedToUser && (
+                  {issue.assignedUsers && (
                     <Avatar
-                      src={issue.assignedToUser.image!}
+                      src={issue.assignedUsers.image!}
                       fallback="?"
                       size="2"
                       radius="full"

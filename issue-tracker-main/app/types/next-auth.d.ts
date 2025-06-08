@@ -1,24 +1,29 @@
-// next-auth.d.ts
-import { DefaultSession } from "next-auth"; // فقط DefaultSession رو برای user لازم داریم
-import { JWT } from "next-auth/jwt";       // خود JWT رو برای توکن لازم داریم
+// app/types/next-auth.d.ts
+import { DefaultSession } from "next-auth";
+import { WorkspaceRole } from "@prisma/client";
 
 declare module "next-auth" {
   /**
-   * تایپ پیش‌فرض session.user رو گسترش می‌دیم تا 'id' رو هم شامل بشه.
+   * تایپ پیش‌فرض session.user را گسترش می‌دهیم تا اطلاعات ورک‌اسپیس را شامل شود.
    */
   interface Session {
     user: {
-      id: string; // خصوصیت سفارشی 'id' رو اضافه می‌کنیم
-    } & DefaultSession["user"]; // خصوصیت‌های پیش‌فرض (name, email, image) رو حفظ می‌کنیم
+      id: string;
+      // اضافه کردن اطلاعات ورک‌اسپیس فعال به session
+      activeWorkspace?: {
+        id: number;
+        name: string;
+        role: WorkspaceRole;
+      };
+    } & DefaultSession["user"]; // حفظ خصوصیت‌های پیش‌فرض (name, email, image)
   }
 }
 
 declare module "next-auth/jwt" {
   /**
-   * تایپ پیش‌فرض JWT رو گسترش می‌دیم تا 'id' رو هم شامل بشه.
+   * تایپ پیش‌فرض JWT را گسترش می‌دهیم تا id کاربر را شامل شود.
    */
   interface JWT {
-    id?: string; // خصوصیت 'id' رو به توکن JWT اضافه می‌کنیم (اختیاری گذاشتم چون ممکنه در برخی شرایط نباشه)
-                 // اگر مطمئنی همیشه هست، می‌تونی string بذاری: id: string;
+    id?: string;
   }
 }

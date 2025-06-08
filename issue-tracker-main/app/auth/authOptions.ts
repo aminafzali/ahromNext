@@ -1,17 +1,52 @@
 // app/auth/authOptions.ts
+import prisma from '@/prisma/client';
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
+import { NextAuthOptions, User } from 'next-auth';
+// ایمپورت کردن AdapterUser برای تایپ‌گذاری صحیح پارامتر 'data' در createUser
+import { AdapterUser } from 'next-auth/adapters';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { NextAuthOptions } from 'next-auth';
-import prisma from '@/prisma/client'; // مطمئن شو مسیر Prisma Client درسته
-import { verificationCodes } from '@/lib/verificationStore'; // Import store
-
-const CODE_EXPIRATION_MINUTES = 5; // اعتبار کد تایید: ۵ دقیقه
+import { verificationCodes } from '@/lib/verificationStore';
+import { WorkspaceRole } from '@prisma/client';
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  // استفاده از PrismaAdapter با تغییرات سفارشی برای createUser
+  adapter: {
+    ...PrismaAdapter(prisma),
+    // این تابع زمانی فراخوانی می‌شود که کاربر جدیدی از طریق یک OAuth provider (مانند گوگل) وارد شود
+    createUser: async (data: AdapterUser) => {
+      // ۱. ابتدا کاربر را ایجاد می‌کنیم
+      const user = await prisma.user.create({
+        data: {
+          name: data.name,
+          email: data.email,
+          image: data.image,
+          emailVerified: data.emailVerified,
+        }
+      });
+
+      // ۲. سپس یک ورک‌اسپیس شخصی برای او می‌سازیم
+      const workspace = await prisma.workspace.create({
+        data: {
+          name: `ورک‌اسپیس ${user.name || 'شخصی'}`,
+          description: 'این ورک‌اسپیس شخصی شماست.'
+        },
+      });
+
+      // ۳. در نهایت، کاربر را به عنوان OWNER به ورک‌اسپیس جدیدش اضافه می‌کنیم
+      await prisma.workspaceMember.create({
+        data: {
+          userId: user.id,
+          workspaceId: workspace.id,
+          role: WorkspaceRole.OWNER,
+        },
+      });
+
+      return user;
+    },
+  },
   session: {
-    strategy: 'jwt', // استفاده از JWT برای مدیریت نشست‌ها توصیه می‌شه
+    strategy: 'jwt',
   },
   providers: [
     GoogleProvider({
@@ -19,93 +54,107 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
     CredentialsProvider({
-      id: 'mobile-login', // شناسه منحصر به فرد برای این provider
-      name: 'ورود با موبایل', // نامی که در صفحه ورود نمایش داده می‌شه
-      credentials: { // فیلدهایی که از کاربر دریافت می‌شن
-        mobile: { label: 'شماره موبایل', type: 'text', placeholder: '09123456789' },
-        code: { label: 'کد تایید', type: 'text', placeholder: '1234' },
+      id: 'mobile-login',
+      name: 'ورود با موبایل',
+      credentials: {
+        mobile: { label: 'شماره موبایل', type: 'text' },
+        code: { label: 'کد تایید', type: 'text' },
       },
-      async authorize(credentials) {
-        if (!credentials?.mobile || !credentials.code) {
-          console.log('Mobile or code is missing');
-          return null;
-        }
-        const { mobile, code } = credentials;
+      async authorize(credentials): Promise<User | null> {
+        if (!credentials?.mobile || !credentials.code) return null;
 
+        const { mobile, code } = credentials;
         const storedEntry = verificationCodes[mobile];
 
-        if (!storedEntry) {
-          console.warn(`No verification code found for mobile: ${mobile}`);
-          return null; // کد یافت نشد
+        if (!storedEntry || Date.now() > storedEntry.expires || storedEntry.code !== code) {
+          return null; // کد نامعتبر یا منقضی شده
         }
-
-        // برای حالت فیک، بررسی زمان انقضا شاید لازم نباشه، اما برای کامل بودن کد نگه می‌داریم
-        if (Date.now() > storedEntry.expires) {
-          console.warn(`Verification code expired for mobile: ${mobile}`);
-          delete verificationCodes[mobile]; // حذف کد منقضی شده
-          return null; // کد منقضی شده است
-        }
-
-        if (storedEntry.code !== code) {
-          console.warn(`Invalid verification code for mobile: ${mobile}. Expected ${storedEntry.code}, got ${code}`);
-          return null; // کد مطابقت ندارد
-        }
-
-        // کد صحیح و معتبر است، آن را حذف کنید تا دوباره استفاده نشود
+        
         delete verificationCodes[mobile];
+        
+        const syntheticEmail = `${mobile}@sms.fake`;
+        
+        // پیدا کردن یا ایجاد کاربر در یک تراکنش برای اطمینان از یکپارچگی
+        const user = await prisma.$transaction(async (tx) => {
+            let userInDb = await tx.user.findUnique({
+              where: { email: syntheticEmail },
+            });
 
-        // یک ایمیل مصنوعی برای Prisma adapter ایجاد کنید
-        // چون NextAuth و Prisma Adapter معمولاً با ایمیل به عنوان شناسه اصلی بهتر کار می‌کنند
-        const syntheticEmail = `${mobile}@sms.fake`; // یک دامنه فیک
+            // اگر کاربر وجود نداشت، آن را به همراه ورک‌اسپیس شخصی ایجاد کن
+            if (!userInDb) {
+                userInDb = await tx.user.create({
+                    data: {
+                        email: syntheticEmail,
+                        name: `کاربر ${mobile}`,
+                    },
+                });
 
-        let user = await prisma.user.findUnique({
-          where: { email: syntheticEmail },
+                const workspace = await tx.workspace.create({
+                    data: {
+                        name: `ورک‌اسپیس ${userInDb.name || 'شخصی'}`,
+                    },
+                });
+
+                await tx.workspaceMember.create({
+                    data: {
+                        userId: userInDb.id,
+                        workspaceId: workspace.id,
+                        role: WorkspaceRole.OWNER,
+                    },
+                });
+            }
+
+            return userInDb;
         });
-
-        if (!user) {
-          // اگر کاربر با این شماره موبایل (ایمیل فیک) وجود ندارد، یک کاربر جدید ایجاد کنید
-          user = await prisma.user.create({
-            data: {
-              email: syntheticEmail,
-              name: `کاربر ${mobile}`, // نام پیش‌فرض، می‌تونید بعداً اجازه تغییر بدید
-              // phone: mobile, // اگر فیلد phone در مدل User دارید
-            },
-          });
-          console.log(`New user created for mobile: ${mobile} with email: ${syntheticEmail}`);
-        } else {
-          console.log(`User found for mobile: ${mobile} with email: ${syntheticEmail}`);
-        }
-        return user; // بازگرداندن شیء کاربر در صورت موفقیت‌آمیز بودن احراز هویت
+        
+        // بازگرداندن کاربر به NextAuth
+        // اصلاح: حذف فیلد emailVerified چون در تایپ User از next-auth وجود ندارد
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            image: user.image,
+        };
       },
     }),
   ],
   pages: {
-    signIn: '/login', // آدرس صفحه ورود سفارشی شما
-    // signOut: '/auth/signout', // (اختیاری)
-    // error: '/auth/error', // (اختیاری) صفحه برای نمایش خطاها
-    // verifyRequest: '/auth/verify-request', // (اختیاری) برای ایمیل magic link
-    // newUser: '/auth/new-user' // (اختیاری) صفحه برای کاربر جدید پس از ثبت‌نام با OAuth
+    signIn: '/login',
   },
   callbacks: {
-    // می‌تونید از callbackها برای کنترل بیشتر روی فرآیند احراز هویت استفاده کنید
-    async jwt({ token, user, account }) {
-      if (account && user) { // هنگام ورود اولیه (sign-in)
-        token.id = user.id; // ID کاربر رو به توکن اضافه کن
-        if (account.provider === 'google') {
-          // اطلاعات بیشتر از گوگل رو می‌تونی اینجا به توکن اضافه کنی
-        }
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
       }
       return token;
     },
     async session({ session, token }) {
       if (token?.id && session.user) {
-        session.user.id = token.id as string; // ID کاربر رو از توکن به نشست منتقل کن
+        session.user.id = token.id as string;
+        
+        // اضافه کردن اطلاعات ورک‌اسپیس به session
+        const memberships = await prisma.workspaceMember.findMany({
+          where: { userId: token.id as string },
+          include: {
+            workspace: {
+              select: { id: true, name: true }
+            }
+          },
+          orderBy: { joinedAt: 'asc' }
+        });
+        
+        // در اینجا، اولین ورک‌اسپیس را به عنوان ورک‌اسپیس فعال در نظر می‌گیریم
+        if (memberships.length > 0) {
+          session.user.activeWorkspace = {
+            id: memberships[0].workspaceId,
+            name: memberships[0].workspace.name,
+            role: memberships[0].role
+          };
+        }
       }
       return session;
     },
   },
-  // secret: process.env.NEXTAUTH_SECRET, // این در Next.js 13+ به صورت خودکار مدیریت می‌شه اگر تعریف نشده باشه، اما تعریفش بهتره
-  // debug: process.env.NODE_ENV === 'development', // برای نمایش لاگ‌های بیشتر در حالت توسعه
 };
 
 export default authOptions;

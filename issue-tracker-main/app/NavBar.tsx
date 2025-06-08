@@ -16,6 +16,7 @@ import {
   Flex,
   Text,
 } from "@radix-ui/themes";
+import WorkspaceSwitcher from "./components/WorkspaceSwitcher";
 
 const NavBar = () => {
   return (
@@ -33,6 +34,8 @@ const NavBar = () => {
             <Link href="/">
               <FiBookOpen className="w-8 h-8 text-zinc-700"/>
             </Link>
+              {/* اضافه کردن کامپوننت انتخابگر ورک‌اسپیس */}
+              <WorkspaceSwitcher />
             <NavLinks />
           </Flex>
           <AuthStatus />

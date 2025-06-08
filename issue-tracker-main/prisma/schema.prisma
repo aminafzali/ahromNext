@@ -1,5 +1,5 @@
 // ====================================================================
-// Prisma Schema: سیستم ورک‌اسپیس با مدیریت نقش‌ها و دسترسی‌های ماژولار
+// Prisma Schema: ادغام سیستم ورک‌اسپیس و تخصیص چندگانه
 // نسخه نهایی و کامل
 // ====================================================================
 
@@ -10,7 +10,7 @@ generator client {
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
-  //  relationMode = "prisma" // این خط را کامنت کردم لطفا تغییرش نده مگر اینکه ازم اجازه بگیری
+  // relationMode = "prisma" // طبق درخواست شما حذف شد
 }
 
 // ========== Enums: تعریف نقش‌ها و سطوح دسترسی ==========
@@ -20,6 +20,7 @@ enum WorkspaceRole {
   ADMIN
   MEMBER
   GUEST
+  VIEWER
 }
 
 enum PermissionLevel {
@@ -55,8 +56,9 @@ model User {
   memberships     WorkspaceMember[]
   teamMemberships TeamMember[]
 
-  assignedIssues        IssueAssignee[]
-  assignedChecklistRuns ChecklistRunAssignee[]
+  // تخصیص‌ها به این کاربر
+  issueAssignments     IssueAssignee[]
+  checklistAssignments ChecklistAssignmentAssignee[]
 
   createdTemplates ChecklistTemplate[] @relation("CreatedTemplates")
   createdIssues    Issue[]             @relation("CreatedIssues")
@@ -78,14 +80,16 @@ model Workspace {
 }
 
 model Team {
-  id                    Int                          @id @default(autoincrement())
-  name                  String                       @db.VarChar(255)
-  workspaceId           Int
-  workspace             Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  members               TeamMember[]
-  permissions           Permission[]
-  assignedIssues        IssueTeamAssignment[]
-  assignedChecklistRuns ChecklistRunTeamAssignment[]
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  members     TeamMember[]
+  permissions Permission[]
+
+  issueAssignments     IssueTeamAssignment[]
+  checklistAssignments ChecklistAssignmentTeamAssignment[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -99,8 +103,10 @@ model WorkspaceMember {
   joinedAt    DateTime      @default(now())
   workspaceId Int
   userId      String        @db.VarChar(255)
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   permissions Permission[]
 
   @@unique([workspaceId, userId])
@@ -113,8 +119,9 @@ model TeamMember {
   joinedAt DateTime @default(now())
   teamId   Int
   userId   String   @db.VarChar(255)
-  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
@@ -122,12 +129,13 @@ model TeamMember {
 }
 
 model Permission {
-  id                Int              @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   level             PermissionLevel
   workspaceMemberId Int?
   teamId            Int?
-  workspaceMember   WorkspaceMember? @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
-  team              Team?            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  workspaceMember WorkspaceMember? @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+  team            Team?            @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   checklistTemplateId Int?
   checklistTemplate   ChecklistTemplate? @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
@@ -140,6 +148,148 @@ model Permission {
   @@index([checklistTemplateId])
   @@index([projectId])
 }
+
+// === مدل‌های طبقه‌بندی (بدون تغییر از اسکیمای شما) ===
+model Category {
+  id        Int                            @id @default(autoincrement())
+  name      String                         @unique @db.VarChar(100)
+  parentId  Int?
+  parent    Category?                      @relation("ParentChild", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children  Category[]                     @relation("ParentChild")
+  templates CategoryOnChecklistTemplates[]
+
+  @@index([name])
+  @@index([parentId])
+}
+
+model Tag {
+  id        Int                       @id @default(autoincrement())
+  name      String                    @unique @db.VarChar(50)
+  color     String                    @default("gray") @db.VarChar(20)
+  templates TagOnChecklistTemplates[]
+
+  @@index([name])
+}
+
+model CategoryOnChecklistTemplates {
+  checklistTemplateId Int
+  categoryId          Int
+  assignedAt          DateTime          @default(now())
+  checklistTemplate   ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
+  category            Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([checklistTemplateId, categoryId])
+  @@index([checklistTemplateId])
+  @@index([categoryId])
+}
+
+model TagOnChecklistTemplates {
+  checklistTemplateId Int
+  tagId               Int
+  assignedAt          DateTime          @default(now())
+  checklistTemplate   ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
+  tag                 Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([checklistTemplateId, tagId])
+  @@index([checklistTemplateId])
+  @@index([tagId])
+}
+
+// ========== مدل‌های موجود شما (به‌روز شده با منطق ورک‌اسپیس و تخصیص چندگانه) ==========
+
+model ChecklistTemplate {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String? @db.VarChar(255)
+  createdByUser   User?   @relation("CreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  items       ChecklistItem[]
+  assignments ChecklistAssignment[]
+  permissions Permission[]
+  categories  CategoryOnChecklistTemplates[]
+  tags        TagOnChecklistTemplates[]
+
+  @@index([isActive])
+  @@index([createdByUserId])
+  @@index([workspaceId])
+}
+
+model ChecklistItem {
+  id          Int                 @id @default(autoincrement())
+  templateId  Int
+  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title       String              @db.VarChar(255)
+  description String              @db.Text
+  order       Int
+  responses   ChecklistResponse[]
+
+  @@index([templateId])
+  @@index([templateId, order])
+}
+
+model ChecklistAssignment {
+  id         Int               @id @default(autoincrement())
+  templateId Int
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  responses  ChecklistResponse[]
+  assignedAt DateTime            @default(now())
+  dueDate    DateTime?
+
+  // اصلاح: جایگزینی تخصیص مستقیم با تخصیص چندگانه
+  assignedUsers ChecklistAssignmentAssignee[]
+  assignedTeams ChecklistAssignmentTeamAssignment[]
+
+  @@index([templateId])
+}
+
+model ChecklistResponse {
+  id           Int                 @id @default(autoincrement())
+  assignmentId Int
+  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  itemId       Int
+  item         ChecklistItem       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  status       ResponseStatus      @default(NONE)
+  issues       Issue[]             @relation("ResponseIssues")
+  respondedAt  DateTime            @default(now()) @updatedAt
+
+  @@index([assignmentId])
+  @@index([itemId])
+}
+
+model Issue {
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  status      Status   @default(OPEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String? @db.VarChar(255)
+  createdByUser   User?   @relation("CreatedIssues", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  responses ChecklistResponse[] @relation("ResponseIssues")
+
+  // اصلاح: جایگزینی تخصیص مستقیم با تخصیص چندگانه
+  assignedUsers IssueAssignee[]
+  assignedTeams IssueTeamAssignment[]
+
+  @@index([workspaceId])
+  @@index([createdByUserId])
+}
+
+// ========== مدل‌های جدید برای تخصیص چندگانه ==========
 
 model IssueAssignee {
   issueId Int
@@ -161,104 +311,27 @@ model IssueTeamAssignment {
   @@index([teamId])
 }
 
-model ChecklistRunAssignee {
-  checklistRunId Int
-  userId         String       @db.VarChar(255)
-  checklistRun   ChecklistRun @relation(fields: [checklistRunId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+model ChecklistAssignmentAssignee {
+  assignmentId Int
+  userId       String              @db.VarChar(255)
+  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([checklistRunId, userId])
+  @@id([assignmentId, userId])
   @@index([userId])
 }
 
-model ChecklistRunTeamAssignment {
-  checklistRunId Int
-  teamId         Int
-  checklistRun   ChecklistRun @relation(fields: [checklistRunId], references: [id], onDelete: Cascade)
-  team           Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+model ChecklistAssignmentTeamAssignment {
+  assignmentId Int
+  teamId       Int
+  assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  team         Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
-  @@id([checklistRunId, teamId])
+  @@id([assignmentId, teamId])
   @@index([teamId])
 }
 
-// ========== مدل‌های ماژول‌ها ==========
-
-model ChecklistTemplate {
-  id              Int             @id @default(autoincrement())
-  title           String          @db.VarChar(255)
-  description     String          @db.Text
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  workspaceId     Int
-  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdByUserId String?         @db.VarChar(255)
-  createdByUser   User?           @relation("CreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  items           ChecklistItem[]
-  runs            ChecklistRun[]
-  permissions     Permission[]
-
-  @@index([workspaceId])
-  @@index([isActive])
-  @@index([createdByUserId])
-}
-
-model ChecklistItem {
-  id          Int                 @id @default(autoincrement())
-  templateId  Int
-  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  title       String              @db.VarChar(255)
-  description String              @db.Text
-  order       Int
-  responses   ChecklistResponse[]
-
-  @@index([templateId])
-}
-
-model ChecklistRun {
-  id            Int                          @id @default(autoincrement())
-  templateId    Int
-  template      ChecklistTemplate            @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  responses     ChecklistResponse[]
-  assignedAt    DateTime                     @default(now())
-  dueDate       DateTime?
-  assignedUsers ChecklistRunAssignee[]
-  assignedTeams ChecklistRunTeamAssignment[]
-
-  @@index([templateId])
-}
-
-model ChecklistResponse {
-  id             Int            @id @default(autoincrement())
-  checklistRunId Int
-  checklistRun   ChecklistRun   @relation(fields: [checklistRunId], references: [id], onDelete: Cascade)
-  itemId         Int
-  item           ChecklistItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  status         ResponseStatus @default(NONE)
-  issue          Issue?
-
-  @@unique([checklistRunId, itemId])
-}
-
-model Issue {
-  id                  Int                   @id @default(autoincrement())
-  title               String                @db.VarChar(255)
-  description         String                @db.Text
-  status              Status                @default(OPEN)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  workspaceId         Int
-  workspace           Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdByUserId     String?               @db.VarChar(255)
-  createdByUser       User?                 @relation("CreatedIssues", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  checklistResponseId Int?                  @unique
-  checklistResponse   ChecklistResponse?    @relation(fields: [checklistResponseId], references: [id], onDelete: SetNull)
-  assignedUsers       IssueAssignee[]
-  assignedTeams       IssueTeamAssignment[]
-
-  @@index([workspaceId])
-  @@index([createdByUserId])
-}
+// ========== مدل‌های ماژول مدیریت پروژه (برای آینده) ==========
 
 model Project {
   id          Int          @id @default(autoincrement())
@@ -278,7 +351,7 @@ model Task {
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
-// ========== مدل‌های احراز هویت ==========
+// ========== مدل‌های احراز هویت (بدون تغییر) ==========
 model Account {
   id                String  @id @default(cuid())
   userId            String
