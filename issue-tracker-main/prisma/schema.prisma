@@ -131,7 +131,7 @@ model TeamMember {
 model Permission {
   id                  Int                @id @default(autoincrement())
   level               PermissionLevel
-  workspaceMemberId   Int?
+  workspaceMemberId   Int?               
   teamId              Int?
   
   workspaceMember     WorkspaceMember?   @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)

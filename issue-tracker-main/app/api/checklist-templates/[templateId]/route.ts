@@ -4,17 +4,18 @@ import prisma from "@/prisma/client";
 import { z } from "zod";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
-import { Prisma, WorkspaceRole } from "@prisma/client";
+import { Prisma, PermissionLevel, WorkspaceRole } from "@prisma/client"; // ✅ ایمپورت PermissionLevel
+import { checkUserPermission } from "@/lib/permissions"; // ✅ ایمپورت تابع دسترسی جدید
 
 const updateItemSchema = z.object({
-  id: z.union([z.number().int().positive(), z.string()]).optional(),
-  title: z.string().min(1).max(255),
+  id: z.number().int().positive().optional(),
+  title: z.string().min(1, "عنوان آیتم الزامی است.").max(255),
   description: z.string().max(65535).optional().nullable(),
   order: z.number().int().min(0),
 });
 
 const updateTemplateSchema = z.object({
-  title: z.string().min(1).max(255).optional(),
+  title: z.string().min(1, "عنوان الگو الزامی است.").max(255).optional(),
   description: z.string().max(65535).optional().nullable(),
   categoryIds: z.array(z.number().int().positive()).optional(),
   tagIds: z.array(z.number().int().positive()).optional(),
@@ -27,15 +28,40 @@ export async function PATCH(
   { params }: { params: { templateId: string } }
 ) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  if (!session?.user?.id)
     return NextResponse.json({ error: "عدم دسترسی" }, { status: 401 });
-  }
 
   const templateId = parseInt(params.templateId);
   if (isNaN(templateId)) {
     return NextResponse.json(
       { error: "شناسه الگو نامعتبر است." },
       { status: 400 }
+    );
+  }
+  const existingTemplate = await prisma.checklistTemplate.findUnique({
+    where: { id: templateId },
+    include: { items: { select: { id: true } } },
+  });
+
+  if (!existingTemplate) {
+    return NextResponse.json(
+      { error: "الگوی چک‌لیست مورد نظر یافت نشد." },
+      { status: 404 }
+    );
+  }
+
+  // ✅ بررسی دسترسی برای ویرایش
+  const access = await checkUserPermission(
+    session.user.id,
+    existingTemplate.workspaceId,
+    { type: "ChecklistTemplate", id: templateId },
+    PermissionLevel.EDIT // حداقل سطح دسترسی مورد نیاز
+  );
+
+  if (!access.hasAccess) {
+    return NextResponse.json(
+      { error: "شما اجازه ویرایش این قالب را ندارید." },
+      { status: 403 }
     );
   }
 
@@ -217,7 +243,7 @@ export async function DELETE(
   { params }: { params: { templateId: string } }
 ) {
   const session = await getServerSession(authOptions);
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "عدم دسترسی" }, { status: 401 });
   }
 
@@ -239,7 +265,21 @@ export async function DELETE(
         { status: 404 }
       );
     }
+    // ✅ بررسی دسترسی برای حذف
+    const access = await checkUserPermission(
+      session.user.id,
+      template.workspaceId,
+      { type: "ChecklistTemplate", id: templateId },
+      PermissionLevel.MANAGE // برای حذف، بالاترین سطح دسترسی لازم است
+    );
 
+    if (!access.hasAccess) {
+      return NextResponse.json(
+        { error: "شما اجازه حذف این قالب را ندارید." },
+        { status: 403 }
+      );
+    }
+    
     await prisma.checklistTemplate.delete({ where: { id: templateId } });
 
     return NextResponse.json(
