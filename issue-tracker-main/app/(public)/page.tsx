@@ -1,94 +1,121 @@
-// File: app/(public)/page.tsx (نسخه نهایی و داینامیک)
+// File: app/(public)/page.tsx (نسخه نهایی و بازطراحی شده)
 import React from 'react';
-import { Heading, Text, Button, Flex, Box, Card, Badge, Grid, Separator } from '@radix-ui/themes';
+import { Heading, Text, Button, Flex, Box, Card, Badge } from '@radix-ui/themes';
 import Link from 'next/link';
-import { ArrowLeftIcon, Component1Icon, FileTextIcon, LightningBoltIcon, MixIcon, BarChartIcon, CheckCircledIcon, DashboardIcon } from '@radix-ui/react-icons';
-import { getServerSession } from 'next-auth';
-import authOptions from '@/app/auth/authOptions';
-
-// کامپوننت هدر داینامیک
-const LandingHeader = async () => {
-    const session = await getServerSession(authOptions);
-
-    return (
-        <header className="sticky top-0 z-10 bg-white/70 dark:bg-gray-950/70 backdrop-blur-md border-b dark:border-gray-800">
-            <Flex justify="between" align="center" className="max-w-7xl mx-auto p-4">
-                <Heading className="font-bold">اهرم</Heading>
-                {session ? (
-                    // اگر کاربر لاگین کرده، دکمه "ورود به داشبورد" را نشان بده
-                    <Button asChild size={{initial: '2', sm: '3'}} variant="solid">
-                        <Link href="/dashboard">
-                            ورود به داشبورد <DashboardIcon className="mr-2 rtl:mr-0 rtl:ml-2" />
-                        </Link>
-                    </Button>
-                ) : (
-                    // در غیر این صورت، دکمه "ورود به سیستم" را نشان بده
-                    <Button asChild size={{initial: '2', sm: '3'}} variant="solid" highContrast>
-                        <Link href="/login">
-                            ورود به سیستم <ArrowLeftIcon className="mr-2 rtl:mr-0 rtl:ml-2" />
-                        </Link>
-                    </Button>
-                )}
-            </Flex>
-      </header>
-    );
-}
-
+import Image from 'next/image';
+import { 
+    RocketIcon, Component1Icon, FileTextIcon, LightningBoltIcon, MixIcon, BarChartIcon, 
+    CheckCircledIcon, ChatBubbleIcon, StarFilledIcon, TargetIcon, LapTimerIcon, Share2Icon 
+} from '@radix-ui/react-icons';
+import LandingHeader from './_components/LandingHeader'; // ✅ ایمپورت هدر جدید
 
 const LandingPage = () => {
   const modules = [
-    { name: "مدیریت پروژه", icon: <Component1Icon width="24" height="24" />, description: "پروژه‌ها و وظایف خود را با دیدی جامع پیگیری و مدیریت کنید." },
-    { name: "مدیریت اسناد", icon: <FileTextIcon width="24" height="24" />, description: "تمام اسناد و فایل‌های مهم خود را در یک مکان امن ذخیره و به اشتراک بگذارید." },
-    { name: "پایگاه دانش", icon: <BarChartIcon width="24" height="24" />, description: "یک مرکز دانش داخلی برای تیم خود بسازید و اطلاعات را به راحتی در دسترس قرار دهید." },
-    { name: "اتوماسیون فرآیند", icon: <LightningBoltIcon width="24" height="24" />, description: "کارهای تکراری را خودکار کرده و در زمان و انرژی تیم خود صرفه‌جویی کنید." },
-    { name: "فرم‌ساز پیشرفته", icon: <MixIcon width="24" height="24" />, description: "فرم‌های داینامیک و هوشمند برای جمع‌آوری هر نوع داده‌ای طراحی کنید." },
-    { name: "چک‌لیست‌های هوشمند", icon: <CheckCircledIcon width="24" height="24" />, description: "فرآیندهای استاندارد خود را با چک‌لیست‌های تعاملی و قابل پیگیری اجرا کنید." },
+    { name: "مدیریت هوشمند کسب‌وکار", icon: <RocketIcon className="w-6 h-6" /> },
+    { name: "مدیریت پروژه و وظایف", icon: <Component1Icon className="w-6 h-6" /> },
+    { name: "پایگاه دانش", icon: <BarChartIcon className="w-6 h-6" /> },
+    { name: "اتوماسیون و گردش کار هوشمند", icon: <LightningBoltIcon className="w-6 h-6" /> },
+    { name: "مدیریت اسناد", icon: <FileTextIcon className="w-6 h-6" /> },
+    { name: "فرم‌ساز پیشرفته", icon: <MixIcon className="w-6 h-6" /> },
+    { name: "چک‌لیست‌های هوشمند", icon: <CheckCircledIcon className="w-6 h-6" /> },
+    { name: "چت‌بات هوشمند", icon: <ChatBubbleIcon className="w-6 h-6" /> },
   ];
 
   return (
-    <Box className="bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-200">
+    <Box className="bg-white dark:bg-black text-slate-900 dark:text-slate-100">
       <LandingHeader />
 
       <main>
-        {/* بخش Hero */}
-        <section className="text-center py-20 lg:py-32 px-4 bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">
-          <Badge size="2" variant="surface" color="violet" className="mb-4">پلتفرم مدیریت یکپارچه کسب‌وکار</Badge>
-          <Heading as="h1" size="9" className="font-extrabold max-w-4xl mx-auto mb-6">
-            قدرت اهرم را در دستان خود بگیرید
-          </Heading>
-          <Text as="p" size="5" color="gray" className="max-w-2xl mx-auto mb-8">
-            اهرم، سیستم مدیریت ارتباطات و اطلاعات شماست. فرآیندهای پیچیده را ساده کنید، همکاری تیمی را افزایش دهید و با شفافیت کامل، کسب‌وکار خود را به پیش ببرید.
-          </Text>
-        </section>
-        
-        <Separator size="4" my="0" />
+        {/* HERO SECTION */}
+        <section className="relative overflow-hidden bg-gradient-to-b from-violet-50 via-white to-white dark:from-violet-950/30 dark:via-black dark:to-black">
+          <div className="container mx-auto px-6 py-24 sm:py-32 lg:px-8">
+            <div className="grid grid-cols-1 gap-x-10 gap-y-16 lg:grid-cols-2">
+              {/* بخش متن و دکمه (چپ در دسکتاپ، بالا در موبایل) */}
+              <div className="text-center lg:text-right flex flex-col justify-center">
+                <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
+                  هوشمندسازی کسب‌وکار، ساده‌تر از همیشه
+                </h1>
+                <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
+                  با پلتفرم یکپارچه اهرم، تمام ابزارهای مورد نیاز برای مدیریت پروژه، اسناد، دانش و فرآیندها را در یک مکان در اختیار داشته باشید و بهره‌وری تیم خود را به اوج برسانید.
+                </p>
+                <div className="mt-10 flex items-center justify-center lg:justify-start gap-x-6">
+                  <Button asChild size="4" radius="full">
+                    <Link href="/login">همین الان شروع کنید</Link>
+                  </Button>
+                </div>
+              </div>
 
-        {/* بخش ماژول‌ها */}
-        <section className="max-w-7xl mx-auto py-16 lg:py-24 px-4">
-            <Box className="text-center mb-12">
-                <Heading as="h2" size="8">یک پلتفرم، تمام نیازهای شما</Heading>
-                <Text as="p" size="4" color="gray" mt="2">ماژول‌های اهرم به صورت یکپارچه با هم کار می‌کنند.</Text>
-            </Box>
-            <Grid columns={{ initial: '1', sm: '2', md: '3' }} gap="8">
-                {modules.map((module) => (
-                    <Card key={module.name} variant='surface' className="p-6 text-right">
-                        <Flex direction="column" gap="3">
-                            <Flex align="center" gap="3" className="text-violet-600 dark:text-violet-400">
-                                {module.icon}
-                                <Heading as="h3" size="5">{module.name}</Heading>
-                            </Flex>
-                            <Text as="p" color="gray" size="3">{module.description}</Text>
+              {/* بخش لوگو (راست در دسکتاپ، پایین در موبایل) */}
+              <div className="mt-10 lg:mt-0 lg:row-start-1 lg:col-start-2 flex items-center justify-center">
+                <div className="relative w-[250px] h-[250px] sm:w-[400px] sm:h-[400px] lg:w-[450px] lg:h-[450px]">
+                  {/* افکت نورانی زیر لوگو */}
+                  <div className="absolute inset-0 bg-violet-400/30 rounded-full blur-3xl" />
+                  <Image
+                    src="/logo/ahrom78-2.png"
+                    alt="لوگوی فناوری اهرم"
+                    fill
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FEATURES SECTION */}
+        <section className="py-16 md:py-24">
+            <div className="container mx-auto px-4">
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl md:text-4xl font-bold">چرا فناوری اهرم؟</h2>
+                    <p className="text-lg text-slate-500 mt-4">تمرکز ما بر سادگی، قدرت و یکپارچگی است.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="text-center p-6">
+                        <Flex justify="center" align="center" className="w-16 h-16 bg-violet-100 dark:bg-violet-900/50 rounded-full mx-auto mb-4 text-violet-600 dark:text-violet-400">
+                           <LapTimerIcon width="32" height="32" />
                         </Flex>
-                    </Card>
-                ))}
-            </Grid>
+                        <h3 className="text-xl font-semibold mb-2">افزایش بهره‌وری</h3>
+                        <p className="text-slate-600 dark:text-slate-400">با خودکارسازی فرآیندها و دسترسی سریع به اطلاعات، در زمان تیم خود صرفه‌جویی کنید.</p>
+                    </div>
+                    <div className="text-center p-6">
+                         <Flex justify="center" align="center" className="w-16 h-16 bg-green-100 dark:bg-green-900/50 rounded-full mx-auto mb-4 text-green-600 dark:text-green-400">
+                           <Share2Icon width="32" height="32" />
+                        </Flex>
+                        <h3 className="text-xl font-semibold mb-2">همکاری یکپارچه</h3>
+                        <p className="text-slate-600 dark:text-slate-400">تمام تیم‌های شما در یک محیط واحد کار می‌کنند، اطلاعات به راحتی به اشتراک گذاشته می‌شود.</p>
+                    </div>
+                    <div className="text-center p-6">
+                         <Flex justify="center" align="center" className="w-16 h-16 bg-blue-100 dark:bg-blue-900/50 rounded-full mx-auto mb-4 text-blue-600 dark:text-blue-400">
+                           <TargetIcon width="32" height="32" />
+                        </Flex>
+                        <h3 className="text-xl font-semibold mb-2">تصمیم‌گیری داده‌محور</h3>
+                        <p className="text-slate-600 dark:text-slate-400">با گزارش‌ها و داشبوردهای تحلیلی، همیشه بهترین تصمیم را برای کسب‌وکارتان بگیرید.</p>
+                    </div>
+                </div>
+            </div>
         </section>
-        {/* در اینجا می‌توانید بخش اخبار را برای کاربران لاگین کرده نمایش دهید */}
-      </main>
 
-      {/* فوتر */}
+        {/* MODULES SECTION */}
+        <section id="modules" className="py-16 md:py-24 bg-gray-50 dark:bg-gray-900">
+            <div className="container mx-auto px-4">
+                <div className="text-center mb-12">
+                    <h2 className="text-3xl md:text-4xl font-bold">تمام ابزارهای مورد نیاز شما</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {modules.map((module) => (
+                        <div key={module.name} className="flex items-center gap-4 p-4 border border-transparent hover:border-gray-200 dark:hover:border-gray-800 hover:bg-white dark:hover:bg-gray-950 rounded-lg transition-all">
+                            <div className="text-violet-500">{module.icon}</div>
+                            <h3 className="text-lg font-medium">{module.name}</h3>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+
+      </main>
       <footer className="text-center p-6 bg-gray-100 dark:bg-gray-900 border-t dark:border-gray-800">
-        <Text size="2" color="gray">&copy; {new Date().getFullYear()} شرکت اهرم. تمام حقوق محفوظ است.</Text>
+        <Text size="2" color="gray">&copy; {new Date().getFullYear()} فناوری اهرم. تمام حقوق محفوظ است.</Text>
       </footer>
     </Box>
   );
