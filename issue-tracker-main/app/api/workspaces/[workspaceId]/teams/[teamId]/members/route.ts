@@ -1,28 +1,54 @@
-// File: app/api/teams/[teamId]/members/route.ts
+// File: app/api/teams/[teamId]/members/route.ts (نسخه کامل و نهایی)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions';
-import { WorkspaceRole } from '@prisma/client';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel } from '@prisma/client';
 import { z } from 'zod';
 
+// Schema برای افزودن عضو جدید - اکنون شناسه کاربر را دریافت می‌کند
 const addTeamMemberSchema = z.object({
-  email: z.string().email("ایمیل وارد شده معتبر نیست."),
+  userId: z.string().min(1, "شناسه کاربر الزامی است."),
 });
 
-// این تابع کمکی برای بررسی دسترسی ادمین به تیمی خاص است
-async function checkTeamAdminAccess(userId: string, teamId: number) {
+// تابع کمکی برای بررسی دسترسی کاربر به یک تیم خاص
+async function checkTeamAccess(currentUserId: string, teamId: number, requiredLevel: PermissionLevel) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) return { authorized: false, message: 'تیم یافت نشد' };
+    if (!team) return { authorized: false, message: 'تیم یافت نشد', workspaceId: null };
 
-    const { hasAccess, role } = await getUserWorkspaceRole(userId, team.workspaceId);
-    if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER)) {
-        return { authorized: false, message: 'شما اجازه مدیریت این تیم را ندارید' };
+    const { hasAccess } = await checkUserPermission(
+        currentUserId,
+        team.workspaceId,
+        { type: 'Project', id: 0 }, // دسترسی در سطح فضای کاری بررسی می‌شود
+        requiredLevel
+    );
+
+    if (!hasAccess) {
+        return { authorized: false, message: 'شما اجازه انجام این عملیات را ندارید', workspaceId: team.workspaceId };
     }
-    return { authorized: true, message: '' };
+    return { authorized: true, workspaceId: team.workspaceId, message: '' };
 }
 
+// دریافت لیست اعضای یک تیم
+export async function GET(request: NextRequest, { params }: { params: { teamId: string } }) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'عدم دسترسی' }, { status: 401 });
+    
+    const teamId = parseInt(params.teamId);
+    if (isNaN(teamId)) return NextResponse.json({ error: 'شناسه تیم نامعتبر' }, { status: 400 });
+
+    const access = await checkTeamAccess(session.user.id, teamId, PermissionLevel.VIEW);
+    if (!access.authorized) return NextResponse.json({ error: access.message }, { status: 403 });
+
+    const teamMembers = await prisma.teamMember.findMany({
+        where: { teamId },
+        include: { user: { select: { id: true, name: true, email: true, image: true } } }
+    });
+    return NextResponse.json(teamMembers);
+}
+
+// افزودن عضو جدید به تیم
 export async function POST(request: NextRequest, { params }: { params: { teamId: string } }) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: 'عدم دسترسی' }, { status: 401 });
@@ -30,7 +56,7 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     const teamId = parseInt(params.teamId);
     if (isNaN(teamId)) return NextResponse.json({ error: 'شناسه تیم نامعتبر' }, { status: 400 });
 
-    const access = await checkTeamAdminAccess(session.user.id, teamId);
+    const access = await checkTeamAccess(session.user.id, teamId, PermissionLevel.MANAGE);
     if (!access.authorized) return NextResponse.json({ error: access.message }, { status: 403 });
 
     const body = await request.json();
@@ -38,14 +64,13 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     if (!validation.success) return NextResponse.json(validation.error.format(), { status: 400 });
 
     try {
-        const userToAdd = await prisma.user.findUnique({ where: { email: validation.data.email } });
-        if (!userToAdd) return NextResponse.json({ error: 'کاربری با این ایمیل یافت نشد' }, { status: 404 });
+        const userToAdd = await prisma.user.findUnique({ where: { id: validation.data.userId } });
+        if (!userToAdd) return NextResponse.json({ error: 'کاربر مورد نظر یافت نشد' }, { status: 404 });
         
-        // اطمینان از اینکه کاربر عضو ورک‌اسپیس است
         const isWorkspaceMember = await prisma.workspaceMember.findUnique({
-            where: { workspaceId_userId: { workspaceId: (await prisma.team.findUnique({where: {id: teamId}}))!.workspaceId, userId: userToAdd.id }}
+            where: { workspaceId_userId: { workspaceId: access.workspaceId!, userId: userToAdd.id }}
         });
-        if (!isWorkspaceMember) return NextResponse.json({ error: 'این کاربر عضو فضای کاری نیست و نمی‌تواند به تیم اضافه شود' }, { status: 400 });
+        if (!isWorkspaceMember) return NextResponse.json({ error: 'این کاربر عضو فضای کاری نیست' }, { status: 400 });
 
         const newTeamMember = await prisma.teamMember.create({
             data: { teamId, userId: userToAdd.id },
@@ -58,5 +83,3 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
         return NextResponse.json({ error: 'خطا در افزودن عضو به تیم' }, { status: 500 });
     }
 }
-
-// ... شما می‌توانید یک تابع DELETE در مسیر /api/teams/[teamId]/members/[userId] برای حذف عضو نیز اضافه کنید.

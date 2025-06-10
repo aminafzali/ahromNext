@@ -1,17 +1,17 @@
-// File: app/api/permissions/[permissionId]/route.ts
+// File: app/api/permissions/[permissionId]/route.ts (نسخه کامل و نهایی)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions';
-import { WorkspaceRole } from '@prisma/client';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel } from '@prisma/client';
 
 // تابع کمکی برای بررسی اینکه آیا کاربر فعلی اجازه مدیریت این دسترسی را دارد یا خیر
 async function checkPermissionManagementAccess(userId: string, permissionId: number) {
     const permission = await prisma.permission.findUnique({
         where: { id: permissionId },
         include: {
-            checklistTemplate: { select: { workspaceId: true } }
+            checklistTemplate: { select: { id: true, workspaceId: true } }
         }
     });
 
@@ -19,13 +19,19 @@ async function checkPermissionManagementAccess(userId: string, permissionId: num
         return { authorized: false, message: 'دسترسی یا قالب مربوطه یافت نشد.' };
     }
 
-    const { hasAccess, role } = await getUserWorkspaceRole(userId, permission.checklistTemplate.workspaceId);
-    if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER)) {
+    // ✅ استفاده از تابع دسترسی جدید
+    const { hasAccess } = await checkUserPermission(
+        userId,
+        permission.checklistTemplate.workspaceId,
+        { type: 'ChecklistTemplate', id: permission.checklistTemplate.id },
+        PermissionLevel.MANAGE // برای مدیریت دسترسی‌ها، به بالاترین سطح نیاز است
+    );
+
+    if (!hasAccess) {
         return { authorized: false, message: 'شما اجازه مدیریت این دسترسی را ندارید.' };
     }
     return { authorized: true, message: '' };
 }
-
 
 export async function DELETE(
   request: NextRequest,

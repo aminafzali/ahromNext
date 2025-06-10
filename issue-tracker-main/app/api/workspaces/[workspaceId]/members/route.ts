@@ -1,10 +1,10 @@
-// File: app/api/workspaces/[workspaceId]/members/route.ts
+// File: app/api/workspaces/[workspaceId]/members/route.ts (نسخه کامل و نهایی)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions';
-import { WorkspaceRole } from '@prisma/client';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel, WorkspaceRole } from '@prisma/client';
 import { z } from 'zod';
 
 const addMemberSchema = z.object({
@@ -29,8 +29,14 @@ export async function GET(
     return NextResponse.json({ error: 'شناسه فضای کاری نامعتبر است' }, { status: 400 });
   }
 
-  // بررسی اینکه آیا کاربر فعلی حداقل عضو این فضای کاری است
-  const { hasAccess } = await getUserWorkspaceRole(session.user.id, workspaceId);
+  // ✅ بررسی دسترسی: برای مشاهده اعضا، کاربر باید حداقل دسترسی VIEW در فضای کاری را داشته باشد
+  const { hasAccess } = await checkUserPermission(
+    session.user.id,
+    workspaceId,
+    { type: 'Project', id: 0 }, // منبع فرضی چون دسترسی در سطح فضای کاری است
+    PermissionLevel.VIEW
+  );
+
   if (!hasAccess) {
     return NextResponse.json({ error: 'شما به این فضای کاری دسترسی ندارید' }, { status: 403 });
   }
@@ -40,7 +46,7 @@ export async function GET(
       where: { workspaceId },
       include: {
         user: {
-          select: { id: true, name: true, email: true, image: true }, // فقط اطلاعات عمومی کاربر
+          select: { id: true, name: true, email: true, image: true },
         },
       },
       orderBy: { joinedAt: 'asc' },
@@ -68,9 +74,15 @@ export async function POST(
     return NextResponse.json({ error: 'شناسه فضای کاری نامعتبر است' }, { status: 400 });
   }
   
-  // بررسی دسترسی: فقط ADMIN یا OWNER می‌توانند عضو اضافه کنند
-  const { hasAccess, role } = await getUserWorkspaceRole(session.user.id, workspaceId);
-  if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER)) {
+  // ✅ بررسی دسترسی: برای افزودن عضو، کاربر باید دسترسی MANAGE داشته باشد
+  const { hasAccess } = await checkUserPermission(
+    session.user.id,
+    workspaceId,
+    { type: 'Project', id: 0 },
+    PermissionLevel.MANAGE
+  );
+
+  if (!hasAccess) {
     return NextResponse.json({ error: 'شما اجازه افزودن عضو را ندارید' }, { status: 403 });
   }
 
@@ -100,7 +112,7 @@ export async function POST(
     
     return NextResponse.json(newMember, { status: 201 });
   } catch (error: any) {
-    if (error.code === 'P2002') { // کد خطای Unique constraint failed
+    if (error.code === 'P2002') {
       return NextResponse.json({ error: 'این کاربر از قبل عضو این فضای کاری است' }, { status: 409 });
     }
     return NextResponse.json({ error: 'خطا در افزودن عضو جدید' }, { status: 500 });

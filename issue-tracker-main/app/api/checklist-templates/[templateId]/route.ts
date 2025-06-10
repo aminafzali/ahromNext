@@ -1,11 +1,11 @@
-// app/api/checklist-templates/[templateId]/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/prisma/client";
-import { z } from "zod";
-import { getServerSession } from "next-auth";
-import authOptions from "@/app/auth/authOptions";
-import { Prisma, PermissionLevel, WorkspaceRole } from "@prisma/client"; // ✅ ایمپورت PermissionLevel
-import { checkUserPermission } from "@/lib/permissions"; // ✅ ایمپورت تابع دسترسی جدید
+// File: app/api/checklist-templates/[templateId]/route.ts (نسخه نهایی و امن‌شده)
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/prisma/client';
+import { z } from 'zod';
+import { getServerSession } from 'next-auth';
+import authOptions from '@/app/auth/authOptions';
+import { Prisma, PermissionLevel, WorkspaceRole } from '@prisma/client'; // ✅ ایمپورت PermissionLevel
+import { checkUserPermission } from '@/lib/permissions'; // ✅ ایمپورت تابع دسترسی جدید
 
 const updateItemSchema = z.object({
   id: z.number().int().positive().optional(),
@@ -23,59 +23,48 @@ const updateTemplateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: { templateId: string } }
 ) {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id)
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "عدم دسترسی" }, { status: 401 });
+  }
 
   const templateId = parseInt(params.templateId);
   if (isNaN(templateId)) {
-    return NextResponse.json(
-      { error: "شناسه الگو نامعتبر است." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "شناسه الگو نامعتبر است." }, { status: 400 });
   }
+
   const existingTemplate = await prisma.checklistTemplate.findUnique({
     where: { id: templateId },
     include: { items: { select: { id: true } } },
   });
 
   if (!existingTemplate) {
-    return NextResponse.json(
-      { error: "الگوی چک‌لیست مورد نظر یافت نشد." },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: "الگوی چک‌لیست مورد نظر یافت نشد." }, { status: 404 });
   }
 
   // ✅ بررسی دسترسی برای ویرایش
   const access = await checkUserPermission(
     session.user.id,
     existingTemplate.workspaceId,
-    { type: "ChecklistTemplate", id: templateId },
+    { type: 'ChecklistTemplate', id: templateId },
     PermissionLevel.EDIT // حداقل سطح دسترسی مورد نیاز
   );
 
   if (!access.hasAccess) {
-    return NextResponse.json(
-      { error: "شما اجازه ویرایش این قالب را ندارید." },
-      { status: 403 }
-    );
+    return NextResponse.json({ error: 'شما اجازه ویرایش این قالب را ندارید.' }, { status: 403 });
   }
 
   const body = await request.json();
   const validation = updateTemplateSchema.safeParse(body);
   if (!validation.success) {
-    return NextResponse.json(
-      {
-        error: "داده‌های ورودی نامعتبر است.",
-        details: validation.error.format(),
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "داده‌های ورودی نامعتبر است.", details: validation.error.format() }, { status: 400 });
   }
+
 
   const {
     title,
@@ -238,6 +227,7 @@ export async function PATCH(
   }
 }
 
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { templateId: string } }
@@ -249,10 +239,12 @@ export async function DELETE(
 
   const templateId = parseInt(params.templateId);
   if (isNaN(templateId)) {
-    return NextResponse.json(
-      { error: "شناسه الگو نامعتبر است." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "شناسه الگو نامعتبر است." }, { status: 400 });
+  }
+  
+  const template = await prisma.checklistTemplate.findUnique({ where: { id: templateId } });
+  if (!template) {
+    return NextResponse.json({ error: "الگوی مورد نظر یافت نشد." }, { status: 404 });
   }
 
   try {

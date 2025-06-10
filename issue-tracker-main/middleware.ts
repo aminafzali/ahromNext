@@ -1,51 +1,47 @@
-// middleware.ts
+// File: middleware.ts (نسخه کامل و نهایی)
 import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-    // از توکن JWT برای دسترسی به اطلاعات session در middleware استفاده می‌کنیم
-    const token = await getToken({ req: request });
-    const { pathname } = request.nextUrl;
+  // دریافت توکن کاربر برای بررسی وضعیت لاگین
+  const token = await getToken({ req: request });
+  const { pathname } = request.nextUrl;
 
-    // اگر کاربر لاگین نکرده است
-    if (!token) {
-        // اگر در حال تلاش برای دسترسی به صفحات عمومی یا API های احراز هویت است، اجازه بده
-        if (pathname.startsWith('/api/auth') || pathname === '/login') {
-            return NextResponse.next();
-        }
-        // در غیر این صورت، او را به صفحه ورود هدایت کن
-        const loginUrl = new URL('/login', request.url);
-        loginUrl.searchParams.set('callbackUrl', pathname);
-        return NextResponse.redirect(loginUrl);
+  const isAuthenticated = !!token;
+  
+  // لیست مسیرهای عمومی که نیاز به لاگین ندارند
+  const publicPaths = ['/', '/login'];
+  const isPublicPage = publicPaths.includes(pathname);
+
+  // سناریو ۱: کاربر لاگین کرده است
+  if (isAuthenticated) {
+    // اگر کاربر لاگین کرده و در حال تلاش برای دسترسی به صفحه لندینگ یا لاگین است...
+    if (isPublicPage) {
+      // ...او را مستقیماً به داشبورد هدایت کن.
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-
-    // اگر کاربر لاگین کرده است
-    const session: any = token; // توکن شامل تمام اطلاعات session از جمله activeWorkspace است
-
-    // بررسی اصلی: اگر کاربر ورک‌اسپیس فعالی در session خود ندارد
-    if (!session.activeWorkspace) {
-        // و اگر در حال حاضر در صفحه مدیریت ورک‌اسپیس یا API های مرتبط نیست
-        if (!pathname.startsWith('/workspaces') && !pathname.startsWith('/api/workspaces')) {
-            // او را به صفحه مدیریت ورک‌اسپیس هدایت کن
-            return NextResponse.redirect(new URL('/workspaces', request.url));
-        }
+  } 
+  // سناریو ۲: کاربر لاگین نکرده است
+  else {
+    // اگر کاربر لاگین نکرده و در تلاش برای دسترسی به یک صفحه محافظت‌شده است...
+    if (!isPublicPage) {
+      // ...او را به صفحه لاگین هدایت کن و آدرس فعلی را به عنوان callbackUrl ذخیره کن.
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(loginUrl);
     }
-    
-    // در غیر این صورت، اجازه دسترسی به صفحه درخواستی را بده
-    return NextResponse.next();
+  }
+
+  // در غیر این صورت (کاربر لاگین کرده در صفحه محافظت‌شده، یا کاربر لاگین نکرده در صفحه عمومی) اجازه دسترسی بده.
+  return NextResponse.next();
 }
 
 export const config = {
-  // این matcher مشخص می‌کند که middleware روی کدام مسیرها اجرا شود
   matcher: [
-    // تمام مسیرهایی که نیاز به احراز هویت دارند را اینجا لیست کنید
-    // به جز مسیرهای عمومی و API های احراز هویت
-    '/issues/list',
-    '/issues/new',
-    '/issues/edit/:id*',
-    '/checklists/list',
-    '/checklists/new',
-    '/checklists/templates/:path*',
-    '/', // صفحه اصلی (پیشخوان)
+    /*
+     * تمام مسیرها را بررسی کن، به جز فایل‌های استاتیک، تصاویر و API ها.
+     * این matcher تضمین می‌کند که تمام صفحات برنامه شما تحت پوشش این قوانین قرار می‌گیرند.
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
 };

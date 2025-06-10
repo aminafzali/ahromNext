@@ -1,28 +1,35 @@
-// File: app/api/teams/[teamId]/members/route.ts (نسخه کامل و نهایی)
+// File: app/api/teams/[teamId]/members/route.ts (نسخه نهایی و امن‌شده)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions';
-import { WorkspaceRole } from '@prisma/client';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel } from '@prisma/client';
 import { z } from 'zod';
 
 const addTeamMemberSchema = z.object({
   userId: z.string().min(1, "شناسه کاربر الزامی است."),
 });
 
-// تابع کمکی برای بررسی دسترسی ادمین به تیم
-async function checkTeamAdminAccess(currentUserId: string, teamId: number) {
+// تابع کمکی برای بررسی دسترسی کاربر به یک تیم خاص
+async function checkTeamAccess(currentUserId: string, teamId: number, requiredLevel: PermissionLevel) {
     const team = await prisma.team.findUnique({ where: { id: teamId } });
-    if (!team) return { authorized: false, message: 'تیم یافت نشد' };
+    if (!team) return { authorized: false, message: 'تیم یافت نشد', workspaceId: null };
 
-    const { hasAccess, role } = await getUserWorkspaceRole(currentUserId, team.workspaceId);
-    if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER)) {
-        return { authorized: false, message: 'شما اجازه مدیریت این تیم را ندارید' };
+    const { hasAccess } = await checkUserPermission(
+        currentUserId,
+        team.workspaceId,
+        { type: 'Project', id: 0 }, // دسترسی در سطح فضای کاری بررسی می‌شود
+        requiredLevel
+    );
+
+    if (!hasAccess) {
+        return { authorized: false, message: 'شما اجازه انجام این عملیات را ندارید', workspaceId: team.workspaceId };
     }
     return { authorized: true, workspaceId: team.workspaceId, message: '' };
 }
 
+// دریافت لیست اعضای یک تیم
 export async function GET(request: NextRequest, { params }: { params: { teamId: string } }) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: 'عدم دسترسی' }, { status: 401 });
@@ -30,7 +37,8 @@ export async function GET(request: NextRequest, { params }: { params: { teamId: 
     const teamId = parseInt(params.teamId);
     if (isNaN(teamId)) return NextResponse.json({ error: 'شناسه تیم نامعتبر' }, { status: 400 });
 
-    const access = await checkTeamAdminAccess(session.user.id, teamId);
+    // برای مشاهده اعضای تیم، حداقل دسترسی VIEW لازم است
+    const access = await checkTeamAccess(session.user.id, teamId, PermissionLevel.VIEW);
     if (!access.authorized) return NextResponse.json({ error: access.message }, { status: 403 });
 
     const teamMembers = await prisma.teamMember.findMany({
@@ -40,7 +48,7 @@ export async function GET(request: NextRequest, { params }: { params: { teamId: 
     return NextResponse.json(teamMembers);
 }
 
-
+// افزودن عضو جدید به تیم
 export async function POST(request: NextRequest, { params }: { params: { teamId: string } }) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: 'عدم دسترسی' }, { status: 401 });
@@ -48,7 +56,8 @@ export async function POST(request: NextRequest, { params }: { params: { teamId:
     const teamId = parseInt(params.teamId);
     if (isNaN(teamId)) return NextResponse.json({ error: 'شناسه تیم نامعتبر' }, { status: 400 });
 
-    const access = await checkTeamAdminAccess(session.user.id, teamId);
+    // برای افزودن عضو به تیم، دسترسی MANAGE لازم است
+    const access = await checkTeamAccess(session.user.id, teamId, PermissionLevel.MANAGE);
     if (!access.authorized) return NextResponse.json({ error: access.message }, { status: 403 });
 
     const body = await request.json();

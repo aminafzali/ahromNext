@@ -44,52 +44,55 @@ enum ResponseStatus {
 // ========== مدل‌های اصلی سیستم ==========
 
 model User {
-  id                      String                        @id @default(cuid())
-  name                    String?
-  email                   String?                       @unique
-  emailVerified           DateTime?
-  image                   String?
-  
-  accounts                Account[]
-  sessions                Session[]
-  
-  memberships             WorkspaceMember[]
-  teamMemberships         TeamMember[]
-  
+  id            String    @id @default(cuid())
+  name          String? // این فیلد را به عنوان نام کامل نگه می‌داریم
+  firstName     String? // ✅ فیلد جدید
+  lastName      String? // ✅ فیلد جدید
+  username      String?   @unique // ✅ فیلد جدید و منحصربه‌فرد
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  accounts Account[]
+  sessions Session[]
+
+  memberships     WorkspaceMember[]
+  teamMemberships TeamMember[]
+
   // تخصیص‌ها به این کاربر
-  issueAssignments        IssueAssignee[]
-  checklistAssignments    ChecklistAssignmentAssignee[]
-  
-  createdTemplates        ChecklistTemplate[]           @relation("CreatedTemplates")
-  createdIssues           Issue[]                       @relation("CreatedIssues")
+  issueAssignments     IssueAssignee[]
+  checklistAssignments ChecklistAssignmentAssignee[]
+
+  createdTemplates ChecklistTemplate[] @relation("CreatedTemplates")
+  createdIssues    Issue[]             @relation("CreatedIssues")
 }
 
 model Workspace {
-  id                 Int                   @id @default(autoincrement())
-  name               String                @db.VarChar(255)
-  description        String?               @db.Text
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  
-  members            WorkspaceMember[]
-  teams              Team[]
-  
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members WorkspaceMember[]
+  teams   Team[]
+
   checklistTemplates ChecklistTemplate[]
   issues             Issue[]
   projects           Project[]
 }
 
 model Team {
-  id                      Int                               @id @default(autoincrement())
-  name                    String                            @db.VarChar(255)
-  workspaceId             Int
-  workspace               Workspace                         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  members                 TeamMember[]
-  permissions             Permission[]
-  
-  issueAssignments        IssueTeamAssignment[]
-  checklistAssignments    ChecklistAssignmentTeamAssignment[]
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255)
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  members     TeamMember[]
+  permissions Permission[]
+
+  issueAssignments     IssueTeamAssignment[]
+  checklistAssignments ChecklistAssignmentTeamAssignment[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -103,10 +106,10 @@ model WorkspaceMember {
   joinedAt    DateTime      @default(now())
   workspaceId Int
   userId      String        @db.VarChar(255)
-  
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   permissions Permission[]
 
   @@unique([workspaceId, userId])
@@ -119,9 +122,9 @@ model TeamMember {
   joinedAt DateTime @default(now())
   teamId   Int
   userId   String   @db.VarChar(255)
-  
-  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, userId])
   @@index([userId])
@@ -129,19 +132,19 @@ model TeamMember {
 }
 
 model Permission {
-  id                  Int                @id @default(autoincrement())
-  level               PermissionLevel
-  workspaceMemberId   Int?               
-  teamId              Int?
-  
-  workspaceMember     WorkspaceMember?   @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
-  team                Team?              @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  
+  id                Int             @id @default(autoincrement())
+  level             PermissionLevel
+  workspaceMemberId Int?
+  teamId            Int?
+
+  workspaceMember WorkspaceMember? @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+  team            Team?            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   checklistTemplateId Int?
   checklistTemplate   ChecklistTemplate? @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
-  
-  projectId           Int?
-  project             Project?           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  projectId Int?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([workspaceMemberId])
   @@index([teamId])
@@ -157,6 +160,7 @@ model Category {
   parent    Category?                      @relation("ParentChild", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children  Category[]                     @relation("ParentChild")
   templates CategoryOnChecklistTemplates[]
+
   @@index([name])
   @@index([parentId])
 }
@@ -166,15 +170,17 @@ model Tag {
   name      String                    @unique @db.VarChar(50)
   color     String                    @default("gray") @db.VarChar(20)
   templates TagOnChecklistTemplates[]
+
   @@index([name])
 }
 
 model CategoryOnChecklistTemplates {
   checklistTemplateId Int
   categoryId          Int
-  assignedAt          DateTime @default(now())
+  assignedAt          DateTime          @default(now())
   checklistTemplate   ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
   category            Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   @@id([checklistTemplateId, categoryId])
   @@index([checklistTemplateId])
   @@index([categoryId])
@@ -183,9 +189,10 @@ model CategoryOnChecklistTemplates {
 model TagOnChecklistTemplates {
   checklistTemplateId Int
   tagId               Int
-  assignedAt          DateTime @default(now())
+  assignedAt          DateTime          @default(now())
   checklistTemplate   ChecklistTemplate @relation(fields: [checklistTemplateId], references: [id], onDelete: Cascade)
   tag                 Tag               @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
   @@id([checklistTemplateId, tagId])
   @@index([checklistTemplateId])
   @@index([tagId])
@@ -194,24 +201,24 @@ model TagOnChecklistTemplates {
 // ========== مدل‌های موجود شما (به‌روز شده با منطق ورک‌اسپیس و تخصیص چندگانه) ==========
 
 model ChecklistTemplate {
-  id              Int                            @id @default(autoincrement())
-  title           String                         @db.VarChar(255)
-  description     String                         @db.Text
-  isActive        Boolean                        @default(true)
-  createdAt       DateTime                       @default(now())
-  updatedAt       DateTime                       @updatedAt
-  
-  workspaceId     Int
-  workspace       Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  
-  createdByUserId String?                        @db.VarChar(255)
-  createdByUser   User?                          @relation("CreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  
-  items           ChecklistItem[]
-  assignments     ChecklistAssignment[]
-  permissions     Permission[]
-  categories      CategoryOnChecklistTemplates[]
-  tags            TagOnChecklistTemplates[]
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String? @db.VarChar(255)
+  createdByUser   User?   @relation("CreatedTemplates", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  items       ChecklistItem[]
+  assignments ChecklistAssignment[]
+  permissions Permission[]
+  categories  CategoryOnChecklistTemplates[]
+  tags        TagOnChecklistTemplates[]
 
   @@index([isActive])
   @@index([createdByUserId])
@@ -219,25 +226,26 @@ model ChecklistTemplate {
 }
 
 model ChecklistItem {
-  id          Int               @id @default(autoincrement())
+  id          Int                 @id @default(autoincrement())
   templateId  Int
-  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  title       String            @db.VarChar(255)
-  description String            @db.Text
+  template    ChecklistTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title       String              @db.VarChar(255)
+  description String              @db.Text
   order       Int
   responses   ChecklistResponse[]
+
   @@index([templateId])
   @@index([templateId, order])
 }
 
 model ChecklistAssignment {
-  id            Int                               @id @default(autoincrement())
-  templateId    Int
-  template      ChecklistTemplate                 @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  
-  responses     ChecklistResponse[]
-  assignedAt    DateTime                          @default(now())
-  dueDate       DateTime?
+  id         Int               @id @default(autoincrement())
+  templateId Int
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  responses  ChecklistResponse[]
+  assignedAt DateTime            @default(now())
+  dueDate    DateTime?
 
   // اصلاح: جایگزینی تخصیص مستقیم با تخصیص چندگانه
   assignedUsers ChecklistAssignmentAssignee[]
@@ -261,24 +269,24 @@ model ChecklistResponse {
 }
 
 model Issue {
-  id          Int                   @id @default(autoincrement())
-  title       String                @db.VarChar(255)
-  description String                @db.Text
-  status      Status                @default(OPEN)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  
-  workspaceId     Int
-  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          Int      @id @default(autoincrement())
+  title       String   @db.VarChar(255)
+  description String   @db.Text
+  status      Status   @default(OPEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  createdByUserId String?               @db.VarChar(255)
-  createdByUser   User?                 @relation("CreatedIssues", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  
-  responses       ChecklistResponse[]   @relation("ResponseIssues")
+  workspaceId Int
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdByUserId String? @db.VarChar(255)
+  createdByUser   User?   @relation("CreatedIssues", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  responses ChecklistResponse[] @relation("ResponseIssues")
 
   // اصلاح: جایگزینی تخصیص مستقیم با تخصیص چندگانه
-  assignedUsers   IssueAssignee[]
-  assignedTeams   IssueTeamAssignment[]
+  assignedUsers IssueAssignee[]
+  assignedTeams IssueTeamAssignment[]
 
   @@index([workspaceId])
   @@index([createdByUserId])
@@ -291,6 +299,7 @@ model IssueAssignee {
   userId  String @db.VarChar(255)
   issue   Issue  @relation(fields: [issueId], references: [id], onDelete: Cascade)
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([issueId, userId])
   @@index([userId])
 }
@@ -300,6 +309,7 @@ model IssueTeamAssignment {
   teamId  Int
   issue   Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
   team    Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@id([issueId, teamId])
   @@index([teamId])
 }
@@ -309,6 +319,7 @@ model ChecklistAssignmentAssignee {
   userId       String              @db.VarChar(255)
   assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([assignmentId, userId])
   @@index([userId])
 }
@@ -318,6 +329,7 @@ model ChecklistAssignmentTeamAssignment {
   teamId       Int
   assignment   ChecklistAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   team         Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@id([assignmentId, teamId])
   @@index([teamId])
 }
@@ -325,12 +337,13 @@ model ChecklistAssignmentTeamAssignment {
 // ========== مدل‌های ماژول مدیریت پروژه (برای آینده) ==========
 
 model Project {
-  id          Int      @id @default(autoincrement())
-  name        String   @db.VarChar(255)
+  id          Int          @id @default(autoincrement())
+  name        String       @db.VarChar(255)
   workspaceId Int
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   permissions Permission[]
   tasks       Task[]
+
   @@index([workspaceId])
 }
 
@@ -356,6 +369,7 @@ model Account {
   id_token          String? @db.Text
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
@@ -366,6 +380,7 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -373,5 +388,6 @@ model VerificationToken {
   identifier String
   token      String   @unique
   expires    DateTime
+
   @@unique([identifier, token])
 }

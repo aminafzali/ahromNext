@@ -1,29 +1,26 @@
-// File: app/api/checklist-templates/route.ts (اصلاح شده)
+// File: app/api/checklist-templates/route.ts (نسخه کامل و نهایی)
 import prisma from "@/prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import * as z from "zod";
 import { getServerSession } from "next-auth";
 import authOptions from "@/app/auth/authOptions";
-import { getUserWorkspaceRole } from "@/lib/permissions";
-import { WorkspaceRole } from "@prisma/client";
+import { checkUserPermission } from "@/lib/permissions";
+import { PermissionLevel } from "@prisma/client";
 
-// Schema برای آیتم‌های چک‌لیست
 const checklistItemServerSchema = z.object({
   title: z.string().min(1, "عنوان آیتم الزامی است.").max(255),
   description: z.string().max(65535).optional().nullable(),
   order: z.number().int().min(0),
 });
 
-// Schema برای ایجاد قالب، اکنون workspaceId را نیز شامل می‌شود
 const createChecklistTemplateServerSchema = z.object({
   title: z.string().min(1, "نام الگو الزامی است.").max(255),
   description: z.string().max(65535).optional().nullable(),
   items: z.array(checklistItemServerSchema).min(1, "حداقل یک آیتم برای الگو الزامی است."),
   categoryIds: z.array(z.number().int().positive()).optional(),
   tagIds: z.array(z.number().int().positive()).optional(),
-  workspaceId: z.number().int().positive("شناسه فضای کاری الزامی است."), // ✅ فیلد جدید
+  workspaceId: z.number().int().positive("شناسه فضای کاری الزامی است."),
 });
-
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -43,21 +40,26 @@ export async function POST(request: NextRequest) {
 
   const { title, description, items, categoryIds, tagIds, workspaceId } = validation.data;
   
-  // ✅ بررسی دسترسی کاربر برای ایجاد قالب در این فضای کاری
-  const { hasAccess, role } = await getUserWorkspaceRole(session.user.id, workspaceId);
-  if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER && role !== WorkspaceRole.MEMBER)) {
+  // ✅ بررسی دسترسی: برای ایجاد قالب، کاربر باید حداقل دسترسی ویرایش داشته باشد
+  const { hasAccess } = await checkUserPermission(
+      session.user.id,
+      workspaceId,
+      { type: 'Project', id: 0 },
+      PermissionLevel.EDIT
+  );
+
+  if (!hasAccess) {
     return NextResponse.json({ error: "شما اجازه ایجاد قالب در این فضای کاری را ندارید" }, { status: 403 });
   }
 
-
-  // ایجاد الگو در یک تراکنش
+  // ایجاد الگو در یک تراکنش (بدون تغییر)
   const newTemplateWithRelations = await prisma.$transaction(async (tx) => {
     const newTemplate = await tx.checklistTemplate.create({
       data: {
         title,
         description: description ?? "",
         createdByUserId: session.user.id,
-        workspaceId, // ✅ اتصال به فضای کاری
+        workspaceId,
         items: {
           create: items.map((item) => ({
             title: item.title,

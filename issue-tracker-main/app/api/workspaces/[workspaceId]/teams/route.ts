@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel } from '@prisma/client';
 import { WorkspaceRole } from '@prisma/client';
 import { z } from 'zod';
 
@@ -18,8 +19,10 @@ export async function GET(request: NextRequest, { params }: { params: { workspac
     const workspaceId = parseInt(params.workspaceId);
     if (isNaN(workspaceId)) return NextResponse.json({ error: 'شناسه فضای کاری نامعتبر' }, { status: 400 });
 
-    const { hasAccess } = await getUserWorkspaceRole(session.user.id, workspaceId);
+
+ const { hasAccess } = await checkUserPermission(session.user.id, workspaceId, { type: 'Project', id: 0 }, PermissionLevel.VIEW);
     if (!hasAccess) return NextResponse.json({ error: 'شما عضو این فضای کاری نیستید' }, { status: 403 });
+
 
     const teams = await prisma.team.findMany({
         where: { workspaceId },
@@ -36,10 +39,10 @@ export async function POST(request: NextRequest, { params }: { params: { workspa
     const workspaceId = parseInt(params.workspaceId);
     if (isNaN(workspaceId)) return NextResponse.json({ error: 'شناسه فضای کاری نامعتبر' }, { status: 400 });
 
-    const { hasAccess, role } = await getUserWorkspaceRole(session.user.id, workspaceId);
-    if (!hasAccess || (role !== WorkspaceRole.ADMIN && role !== WorkspaceRole.OWNER)) {
-        return NextResponse.json({ error: 'شما اجازه ایجاد تیم در این فضای کاری را ندارید' }, { status: 403 });
-    }
+    // ✅ بررسی دسترسی: برای ایجاد تیم، کاربر باید دسترسی MANAGE داشته باشد
+    const { hasAccess } = await checkUserPermission(session.user.id, workspaceId, { type: 'Project', id: 0 }, PermissionLevel.MANAGE);
+    if (!hasAccess) return NextResponse.json({ error: 'شما اجازه ایجاد تیم در این فضای کاری را ندارید' }, { status: 403 });
+
 
     const body = await request.json();
     const validation = createTeamSchema.safeParse(body);

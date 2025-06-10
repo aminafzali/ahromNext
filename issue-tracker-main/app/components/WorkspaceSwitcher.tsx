@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { Avatar, Box, DropdownMenu, Flex, Text } from '@radix-ui/themes';
 import { Skeleton } from "@/app/components";
-import useWorkspaceStore, { ActiveWorkspace } from '@/app/workspaces/store';
+import useWorkspaceStore, { ActiveWorkspace } from '@/app/(protected)/workspaces/store';
 import { CheckIcon } from '@radix-ui/react-icons';
 
 const WorkspaceSwitcher = () => {

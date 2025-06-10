@@ -1,4 +1,4 @@
-// File: app/layout.tsx (نسخه نهایی با AppLayout)
+// File: app/layout.tsx (Root Layout)
 import '@radix-ui/themes/styles.css';
 import './theme-config.css';
 import './globals.css';
@@ -7,7 +7,6 @@ import { Vazirmatn } from 'next/font/google';
 import { Theme } from '@radix-ui/themes';
 import AuthProvider from './auth/Provider';
 import QueryClientProvider from './QueryClientProvider';
-import AppLayout from './components/AppLayout'; // ✅ ایمپورت لایه‌بندی جدید
 
 const vazirFont = Vazirmatn({
   subsets: ['arabic', 'latin'],
@@ -31,10 +30,8 @@ export default function RootLayout({
         <QueryClientProvider>
           <AuthProvider>
             <Theme accentColor="violet" grayColor="mauve" radius="medium">
-                {/* به جای Flex و Sidebar و Header، فقط از AppLayout استفاده می‌کنیم */}
-                <AppLayout>
-                    {children}
-                </AppLayout>
+                {/* این layout فقط فرزندان خود را رندر می‌کند و هیچ UI اضافه‌ای ندارد */}
+                {children}
             </Theme>
           </AuthProvider>
         </QueryClientProvider>

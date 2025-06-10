@@ -1,4 +1,4 @@
-// app/api/checklist-assignments/route.ts
+// File: app/api/checklist-assignments/route.ts (نسخه نهایی)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { getServerSession } from 'next-auth';
@@ -6,70 +6,82 @@ import authOptions from '@/app/auth/authOptions';
 import { z } from 'zod';
 import { ResponseStatus } from '@prisma/client';
 
+// Schema را برای دریافت آرایه‌ای از ID ها به‌روز می‌کنیم
 const createAssignmentSchema = z.object({
-  templateId: z.number().int().positive("شناسه الگو نامعتبر است."),
-  assignedToUserId: z.string().min(1, "شناسه کاربر برای تخصیص الزامی است."),
-  // dueDate: z.string().optional().refine(val => !val || !isNaN(Date.parse(val)), { message: "تاریخ نامعتبر است."}), // اعتبارسنجی تاریخ اگر استفاده شود
+  templateId: z.number().int().positive(),
+  dueDate: z.string().optional().nullable(),
+  assignedUserIds: z.array(z.string()).optional(),
+  assignedTeamIds: z.array(z.number().int()).optional(),
+}).refine(data => data.assignedUserIds?.length || data.assignedTeamIds?.length, {
+    message: "باید حداقل یک کاربر یا یک تیم برای تخصیص انتخاب شود.",
+    path: ["assignedUserIds"], // خطا را به یکی از فیلدها مرتبط می‌کنیم
 });
+
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user) { // بررسی وجود session.user
-    return NextResponse.json({ error: 'عدم دسترسی. لطفاً ابتدا وارد شوید.' }, { status: 401 });
+  if (!session?.user) {
+    return NextResponse.json({ error: 'عدم دسترسی.' }, { status: 401 });
   }
 
   const body = await request.json();
   const validation = createAssignmentSchema.safeParse(body);
 
   if (!validation.success) {
-    return NextResponse.json({ error: "داده‌های ورودی نامعتبر.", details: validation.error.format() }, { status: 400 });
+    return NextResponse.json({ error: validation.error.format() }, { status: 400 });
   }
 
-  const { templateId, assignedToUserId } = validation.data;
-  // const dueDate = validation.data.dueDate ? new Date(validation.data.dueDate) : undefined;
+  const { templateId, dueDate, assignedUserIds, assignedTeamIds } = validation.data;
 
   try {
-    // ۱. بررسی وجود الگو
     const template = await prisma.checklistTemplate.findUnique({
       where: { id: templateId },
-      include: { items: { select: { id: true } } }, // فقط به ID آیتم‌ها نیاز داریم
+      include: { items: { select: { id: true } } },
     });
-
     if (!template) {
-      return NextResponse.json({ error: "الگوی چک‌لیست مورد نظر یافت نشد." }, { status: 404 });
+      return NextResponse.json({ error: "الگوی چک‌لیست یافت نشد." }, { status: 404 });
     }
-
     if (template.items.length === 0) {
-        return NextResponse.json({ error: "این الگو هیچ آیتمی برای تخصیص ندارد." }, { status: 400 });
+        return NextResponse.json({ error: "این الگو آیتمی برای تخصیص ندارد." }, { status: 400 });
     }
 
-    // ۲. بررسی وجود کاربر
-    const userToAssign = await prisma.user.findUnique({
-      where: { id: assignedToUserId },
-    });
+    // تمام عملیات را در یک تراکنش انجام می‌دهیم
+    const newAssignment = await prisma.$transaction(async (tx) => {
+        // ۱. ایجاد رکورد اصلی تخصیص
+        const assignment = await tx.checklistAssignment.create({
+            data: {
+                templateId: template.id,
+                dueDate: dueDate ? new Date(dueDate) : null,
+                responses: { // ایجاد پاسخ‌های خالی برای هر آیتم
+                    create: template.items.map(item => ({
+                        itemId: item.id,
+                        status: ResponseStatus.NONE,
+                    })),
+                },
+            },
+        });
 
-    if (!userToAssign) {
-      return NextResponse.json({ error: "کاربر مورد نظر برای تخصیص یافت نشد." }, { status: 404 });
-    }
+        // ۲. اتصال کاربران انتخاب شده
+        if (assignedUserIds && assignedUserIds.length > 0) {
+            await tx.checklistAssignmentAssignee.createMany({
+                data: assignedUserIds.map(userId => ({
+                    assignmentId: assignment.id,
+                    userId: userId,
+                }))
+            });
+        }
+        
+        // ۳. اتصال تیم‌های انتخاب شده
+        if (assignedTeamIds && assignedTeamIds.length > 0) {
+            await tx.checklistAssignmentTeamAssignment.createMany({
+                data: assignedTeamIds.map(teamId => ({
+                    assignmentId: assignment.id,
+                    teamId: teamId,
+                }))
+            });
+        }
 
-    // ۳. ایجاد ChecklistAssignment و ChecklistResponse های مرتبط در یک تراکنش
-    const newAssignment = await prisma.checklistAssignment.create({
-      data: {
-        templateId: template.id,
-        assignedToUserId: userToAssign.id,
-        // assignedByUserId: session.user.id, // اگر می‌خواهید ثبت کنید چه کسی تخصیص داده
-        // dueDate: dueDate,
-        responses: {
-          create: template.items.map(item => ({
-            itemId: item.id,
-            status: ResponseStatus.NONE, // وضعیت پیش‌فرض برای هر آیتم
-          })),
-        },
-      },
-      include: {
-        template: { select: { title: true } },
-        assignedToUser: { select: { name: true, email: true } },
-      }
+        return assignment;
     });
 
     return NextResponse.json(newAssignment, { status: 201 });

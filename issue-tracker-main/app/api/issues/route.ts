@@ -1,11 +1,11 @@
-// File: app/api/issues/route.ts (اصلاح شده)
+// File: app/api/issues/route.ts (نسخه کامل و نهایی)
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/prisma/client';
 import { z } from 'zod';
 import { getServerSession } from 'next-auth';
 import authOptions from '@/app/auth/authOptions';
-import { getUserWorkspaceRole } from '@/lib/permissions'; // ✅ اصلاح import
-import { WorkspaceRole } from '@prisma/client';
+import { checkUserPermission } from '@/lib/permissions';
+import { PermissionLevel } from '@prisma/client';
 
 const createIssueSchema = z.object({
   title: z.string().min(1, "عنوان الزامی است.").max(255),
@@ -27,11 +27,16 @@ export async function POST(request: NextRequest) {
 
   const { workspaceId, title, description } = validation.data;
 
-  // ✅ استفاده از نام صحیح تابع
-  const { hasAccess } = await getUserWorkspaceRole(session.user.id, workspaceId);
+  // ✅ بررسی دسترسی: برای ایجاد مسئله، کاربر باید حداقل دسترسی ویرایش داشته باشد
+  const { hasAccess } = await checkUserPermission(
+      session.user.id, 
+      workspaceId,
+      { type: 'Project', id: 0 }, // منبع فرضی چون عملیات در سطح فضای کاری است
+      PermissionLevel.EDIT
+  );
   
   if (!hasAccess) {
-    return NextResponse.json({ error: "شما عضو این فضای کاری نیستید" }, { status: 403 });
+    return NextResponse.json({ error: "شما اجازه ایجاد مسئله در این فضای کاری را ندارید" }, { status: 403 });
   }
 
   const newIssue = await prisma.issue.create({

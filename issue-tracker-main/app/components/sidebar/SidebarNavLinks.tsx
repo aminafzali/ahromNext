@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSidebarStore } from './store';
-import useWorkspaceStore from '@/app/workspaces/store';
+import useWorkspaceStore from '@/app/(protected)/workspaces/store';
 import { HomeIcon, CheckCircledIcon, VercelLogoIcon } from '@radix-ui/react-icons';
 import classnames from 'classnames';
 import { Flex, Text, Tooltip } from '@radix-ui/themes';
